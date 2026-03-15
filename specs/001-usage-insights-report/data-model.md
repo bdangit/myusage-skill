@@ -42,8 +42,10 @@ Represents a single conversation with one AI tool.
 | `input_tokens` | `Optional[int]` | Total input tokens across the session. Available from Claude Code (`message.usage.input_tokens` on assistant entries) and Copilot CLI (`assistant.usage.inputTokens`). Not available from Copilot VS Code. |
 | `output_tokens` | `Optional[int]` | Total output tokens across the session. Same availability as `input_tokens`. |
 | `category` | `str` | Category assigned by the categorizer. One of: `"Debugging"`, `"Code Generation"`, `"Learning/Explanation"`, `"Planning"`, `"Writing/Docs"`, `"Refactoring"`, `"Other"`. Always set. |
-| `is_flow_state` | `bool` | Derived: `True` when `message_count >= 10` AND `median(inter_message_gaps) < 300` (seconds) AND `duration_seconds > 900`. All three conditions must hold. |
+| `tool_call_count` | `int` | Total number of tool/command invocations by the agent in this session. Source: Claude Code — assistant entries with `tool_use` content blocks; Copilot CLI — `tool.execution_start` events. `0` for Copilot VS Code (not exposed). |
+| `session_character` | `str` | Derived classification: `"autonomous"`, `"deeply_engaged"`, or `"general"`. See scoring rules below. |
 | `inter_message_gaps` | `List[float]` | Derived: list of elapsed seconds between consecutive user messages, in chronological order. Empty if `message_count < 2`. |
+| `concurrent_peak` | N/A | Not a Session field — computed at the InsightsReport level across all sessions. See InsightsReport. |
 
 ---
 
@@ -71,9 +73,12 @@ The top-level aggregate, combining all tool snapshots.
 | Field | Type | Description |
 |---|---|---|
 | `generated_at` | `datetime` (UTC-aware) | Timestamp when the report was generated |
+| `local_timezone` | `str` | Local timezone name detected at generation time (e.g., `"PST"`, `"America/Los_Angeles"`). All display times in the report use this timezone. |
 | `snapshots` | `Dict[str, ToolSnapshot]` | Keyed by tool name string (e.g., `"claude_code"`). Only tools for which at least one session was found are included. |
 | `total_sessions_all_tools` | `int` | Derived: sum of `snapshot.total_sessions` across all entries in `snapshots` |
 | `total_messages_all_tools` | `int` | Derived: sum of `snapshot.total_messages` across all entries in `snapshots` |
+| `peak_concurrent_sessions` | `int` | Derived: maximum number of sessions (across all tools) whose time ranges overlap at any single point in time. |
+| `avg_concurrent_sessions` | `float` | Derived: mean number of concurrently running sessions, sampled at 1-minute intervals across the full history date range. |
 
 ---
 
@@ -104,6 +109,23 @@ the user.
 | 6 | Refactoring | `refactor`, `clean up`, `improve`, `rename`, `reorganize`, `simplify`, `restructure`, `extract`, `dedup` |
 | 7 | Other | (no keywords — assigned when all category scores are zero) |
 
+### Session Character Rules
+
+Classification is applied in priority order — the first rule that matches wins:
+
+| Character | Condition | Meaning |
+|---|---|---|
+| `autonomous` | `tool_call_count / max(message_count, 1) >= 3` AND `duration_seconds >= 300` | Agent was churning work; human stepped away |
+| `deeply_engaged` | `message_count >= 5` AND `median(inter_message_gaps) < 120` AND `tool_call_count / max(message_count, 1) < 1` | Human was actively conversing to learn or refine |
+| `general` | Everything else | Standard mixed session |
+
+When `tool_call_count` is unavailable (Copilot VS Code):
+- `autonomous` falls back to: `duration_seconds >= 600` AND `message_count <= 3`
+- `deeply_engaged` falls back to: `message_count >= 5` AND `median(inter_message_gaps) < 120`
+- A flag `character_approximate: bool` is set to `True` on the session to indicate the classification used fallback logic.
+
+---
+
 ### Scoring algorithm
 
 1. Concatenate the `content` of all user messages in the session into a single lowercased string.
@@ -127,8 +149,13 @@ any downstream component (categorizer, report generator).
 - `Session.message_count`: computed by filtering `messages` to `role == "user"`.
 - `Session.inter_message_gaps`: computed by sorting user messages by timestamp and taking
   consecutive differences.
-- `Session.is_flow_state`: computed after `inter_message_gaps` is populated.
+- `Session.session_character`: computed after `tool_call_count` and `inter_message_gaps` are
+  populated, using the Session Character Rules table above.
 - `Session.category`: assigned by the categorizer component after all other fields are set.
+- `InsightsReport.peak_concurrent_sessions`: computed by sorting all sessions by start time
+  and using a sweep-line algorithm to find the maximum overlap count.
+- `InsightsReport.avg_concurrent_sessions`: computed by sampling active session count at
+  1-minute intervals across the full date range and taking the mean.
 - `ToolSnapshot.total_sessions`, `total_messages`, `total_input_tokens`, `total_output_tokens`,
   `date_range_start`, `date_range_end`: all computed from the `sessions` list.
 - `InsightsReport.total_sessions_all_tools`, `total_messages_all_tools`: computed from `snapshots`.

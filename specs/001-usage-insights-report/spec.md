@@ -27,6 +27,9 @@ produces a cross-tool usage breakdown with session counts and time percentages.
    generates cleanly for the single tool without errors or empty sections.
 3. **Given** I have no chat history files, **When** I run the skill, **Then** the report shows a
    clear, friendly message that no data was found rather than an error.
+4. **Given** I have overlapping sessions across tools or projects, **When** I view the report,
+   **Then** the headline summary shows my peak concurrent session count and average concurrent
+   sessions — so I can see how often I'm multitasking across agents.
 
 ---
 
@@ -53,26 +56,34 @@ chart that accurately reflects the timing of sessions in the input data.
 
 ---
 
-### User Story 3 — Conversation Depth & Flow State Detection (Priority: P2)
+### User Story 3 — Session Character: Agent Autonomy & Deep Engagement (Priority: P2)
 
-As a developer, I want to know how long and deep my AI conversations are, whether I'm in a flow
-state during sessions, and how often I stay engaged versus drop in and out — so I can understand
-the quality and depth of my AI-assisted work.
+As a developer, I want to know what kind of work sessions I'm having — whether the agent is
+running long and autonomously (I've stepped away while it churns through work), or whether I'm
+deeply engaged in back-and-forth conversation to learn, explore, or refine — so I can understand
+how I actually use AI across different working modes.
 
-**Why this priority**: Depth and flow detection are what make this report feel like a genuine
-personal insight tool rather than just a usage counter.
+**Why this priority**: These two session types reveal fundamentally different working patterns.
+Autonomy sessions show how much the agent is doing work *for* me. Engagement sessions show how
+much I'm using it as a thinking partner. Both are valuable to see separately.
 
-**Independent Test**: Given sessions with varying message counts and timing, the report correctly
-identifies long vs. short sessions, flow vs. fragmented engagement, and average conversation depth.
+**Independent Test**: Given synthetic sessions with known tool-call-to-message ratios and
+inter-message timing, the report correctly classifies each as autonomous, engaged, or neither.
 
 **Acceptance Scenarios**:
 
-1. **Given** my chat history, **When** I view the report, **Then** I see average and median
-   conversation length by message count and by time, and a distribution chart of session depth.
-2. **Given** sessions with 10+ messages sent rapidly over 15+ minutes, **When** I view the
-   report, **Then** those sessions are flagged as likely flow state sessions.
-3. **Given** sessions with large time gaps between messages, **When** I view the report, **Then**
-   those sessions are identified as fragmented or interrupted rather than flow.
+1. **Given** a session with many tool calls and few human messages over a long duration,
+   **When** I view the report, **Then** it is classified as an **agent autonomy** session —
+   meaning the agent was running and churning through work while I was free to do other things.
+2. **Given** a session with frequent short-gap human messages, low tool-call ratio, and sustained
+   back-and-forth, **When** I view the report, **Then** it is classified as a **deep engagement**
+   session — meaning I was actively conversing to learn, refine, or explore.
+3. **Given** my full chat history, **When** I view the report, **Then** I see a breakdown of
+   sessions by character (Autonomous / Deeply Engaged / General) with counts and percentages
+   per tool.
+4. **Given** my chat history, **When** I view the report, **Then** I see average and median
+   session length by message count and duration, with the distribution chart annotated to show
+   which sessions were autonomous vs. engaged.
 
 ---
 
@@ -137,6 +148,9 @@ bucket and shows the distribution chart.
 - What if a conversation is genuinely multi-topic and no single category dominates?
 - What if message content is very short (e.g., one-word replies) making categorization
   unreliable?
+- What if tool call counts are unavailable for a source (e.g., Copilot VS Code doesn't expose
+  them) — how does session character classification degrade gracefully?
+- What if all sessions are short and none qualify as autonomous or deeply engaged?
 
 ## Requirements *(mandatory)*
 
@@ -152,10 +166,17 @@ bucket and shows the distribution chart.
 - **FR-003**: The report MUST include visually rich charts for each insight category: tool usage
   split, hourly heatmap, session depth distribution, mode breakdown, model usage, and conversation
   category breakdown.
-- **FR-004**: The skill MUST detect and visually highlight flow state sessions based on message
-  density and session duration.
-- **FR-005**: The report MUST include a headline summary section at the top with the single most
-  interesting insight from each category — a personalized digest the user sees first.
+- **FR-004**: The skill MUST classify each session into one of three characters:
+  - **Autonomous**: agent running long with high tool-call-to-user-message ratio (≥ 3:1) and
+    duration ≥ 5 minutes — the agent was churning work while the human was free.
+  - **Deeply Engaged**: high user message count (≥ 5) with short median inter-message gap
+    (< 2 minutes) and low tool-call ratio (< 1:1) — the human was actively conversing.
+  - **General**: everything else.
+  When tool-call data is unavailable for a source (e.g., Copilot VS Code), classification
+  falls back to duration + message count heuristics only, and the report notes the limitation.
+- **FR-005**: The report MUST include a headline summary section at the top showing: total
+  sessions, total messages, peak concurrent sessions, average concurrent sessions, and the
+  single most interesting insight from each section — a personalized digest the user sees first.
 - **FR-006**: The skill MUST show per-tool breakdowns for all metrics, not only aggregated totals.
 - **FR-007**: The skill MUST operate with zero external runtime dependencies — all data parsing
   and report generation uses only standard library capabilities of the implementation language.
@@ -175,6 +196,13 @@ bucket and shows the distribution chart.
   all tools and broken down per tool.
 - **FR-013**: Every conversation MUST be assigned to exactly one category — the most dominant
   one. Conversations that don't fit a defined bucket go to "Other".
+- **FR-014**: All times displayed in the report (heatmaps, timelines, session timestamps) MUST
+  be shown in the user's local timezone, auto-detected from the system at report generation time.
+  The detected timezone name MUST be shown in the report header so the user knows what offset
+  is in use.
+- **FR-015**: The report MUST show peak concurrent sessions and average concurrent sessions in
+  the headline summary. Concurrent sessions are defined as sessions from any tool whose time
+  ranges overlap.
 
 ### Key Entities
 
@@ -210,8 +238,10 @@ Evals MUST be validated on Claude Code AND at least one other supported agent CL
   split that matches the input data exactly.
 - **EVAL-002 (US2)**: Given synthetic history with known timestamps, the hourly heatmap in the
   report correctly identifies the peak hour as the hour with the most messages in the input.
-- **EVAL-003 (US3)**: Given a synthetic session with 12 messages over 22 minutes with all
-  inter-message gaps under 3 minutes, the report correctly flags it as a flow state session.
+- **EVAL-003 (US3)**: Given two synthetic sessions — one with 20 tool calls and 3 user messages
+  over 10 minutes (autonomous), and one with 8 user messages at 90-second gaps and 1 tool call
+  (deeply engaged) — the report correctly classifies each and shows them in the session character
+  breakdown chart.
 - **EVAL-004 (US4)**: Given synthetic history with explicit model names and mode tags, the
   report correctly renders model and mode distributions that match the input data.
 - **EVAL-005 (US5)**: Given synthetic conversations with clearly typed content — one session
@@ -272,16 +302,25 @@ Evals MUST be validated on Claude Code AND at least one other supported agent CL
 
 ### General
 
-- Flow state is defined as: a session with 10 or more messages where the median inter-message
-  gap is under 5 minutes and total session duration exceeds 15 minutes.
+- **Session character** is classified as:
+  - *Autonomous*: tool_calls / user_messages ≥ 3 AND duration ≥ 5 minutes
+  - *Deeply Engaged*: user_messages ≥ 5 AND median inter-message gap < 2 minutes AND tool_calls / user_messages < 1
+  - *General*: everything else
+  When tool call data is unavailable (Copilot VS Code), classification uses duration +
+  message count only and is noted as approximate in the report.
 - "Session duration" is derived from the timestamp of the first to last message in the session
   across all tools — none of the three sources expose a wall-clock active-time metric directly.
+- Tool call counts are available for Claude Code (assistant entries with `tool_use` content
+  blocks) and Copilot CLI (`tool.execution_start` events). Not available for Copilot VS Code.
 - The report is a point-in-time snapshot — no real-time updates needed.
 - Chart rendering uses Chart.js inlined into the HTML output. The skill fetches Chart.js from
   its CDN at report generation time and embeds the full library source inline. No internet
   connection is required to view the report after it is generated.
 - Chart.js is the single approved frontend exception to the zero-dependency rule.
 - Implementation language: Python 3, stdlib only (no pip installs).
+- Local timezone is auto-detected at report generation time using Python's
+  `datetime.now().astimezone().tzinfo`. All display times in the report use this timezone.
+  The timezone name (e.g., "PST", "America/Los_Angeles") is shown in the report header.
 - Mode representation is normalized across tools: VS Code Copilot's `"agent"`/`"ask"` string
   and Copilot CLI's `agentMode` boolean are both mapped to a common `agent` / `ask` label in
   the report.
