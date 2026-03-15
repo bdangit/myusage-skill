@@ -1,0 +1,16 @@
+# Claude Code agent state - may contain credentials
+# Note: CLAUDE.md (symlink to AGENTS.md) and .claude/commands/ are intentionally committed
+.claude/*
+!.claude/commands/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Generated report output (personal data)
+*.html
+
+# macOS
+.DS_Store
