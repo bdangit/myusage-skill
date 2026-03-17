@@ -1494,11 +1494,16 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         {variant_footnote}
       </div>"""
 
-    # Token summary
+    # Token + PRU summary
     token_html = ""
-    if has_tokens:
-        token_html = f"""
-      <div class="stat-row">
+    if has_tokens or has_prus:
+        total_prus_all = sum(v for v in tool_prus.values() if v is not None)
+        pru_stat = f"""
+        <div class="stat-item">
+          <div class="stat-value">{total_prus_all:.1f}</div>
+          <div class="stat-label">Total PRUs</div>
+        </div>""" if has_prus else ""
+        token_stats = f"""
         <div class="stat-item">
           <div class="stat-value">{total_input:,}</div>
           <div class="stat-label">Input Tokens</div>
@@ -1510,7 +1515,9 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         <div class="stat-item">
           <div class="stat-value">{(total_input + total_output):,}</div>
           <div class="stat-label">Total Tokens</div>
-        </div>
+        </div>""" if has_tokens else ""
+        token_html = f"""
+      <div class="stat-row">{token_stats}{pru_stat}
       </div>"""
 
     gen_ts_local = fmt_dt(report.generated_at)
