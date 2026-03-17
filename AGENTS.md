@@ -7,11 +7,14 @@ Last updated: 2026-03-17
 A skill (runnable by any LLM agent — Claude Code, GitHub Copilot, or other) that generates a
 self-contained HTML insights report from local AI tool chat history (Claude Code, Copilot VS Code, Copilot CLI).
 
-## Design Principles
+## Governing Principles
 
-- **LLM-agnostic**: The skill and generated report must not assume a specific LLM or vendor. Avoid hardcoding "Claude", "Copilot", or any product name in user-facing text. The agent invoking the skill could be Claude, Copilot, or any future model.
-- **Stdlib only**: No pip dependencies — keep the report generator runnable with bare Python 3.8+.
-- **Self-contained output**: The generated HTML report must work with no external network requests after generation (Chart.js inlined at build time).
+All development is governed by the project constitution at
+[`.specify/memory/constitution.md`](.specify/memory/constitution.md) (v1.2.0).
+
+The six non-negotiable principles are: **Evals-First**, **Agent CLI Agnostic**,
+**Zero Dependencies**, **Simplicity**, **Trunk-Based Development**, and
+**LLM-Agnostic Insights**. Read the constitution before making any design decisions.
 
 ## Active Technologies
 
@@ -23,9 +26,10 @@ self-contained HTML insights report from local AI tool chat history (Claude Code
 ```text
 myusage-skill/
 ├── SKILL.md                        # Skill definition (triggers + agent instructions)
-├── CLAUDE.md                       # This file
+├── AGENTS.md                       # This file (agent-agnostic guidelines)
+├── CLAUDE.md                       # Claude Code-specific variant of this file
 ├── scripts/
-│   └── generate_report.py          # Report generator (to be implemented)
+│   └── generate_report.py          # Report generator
 └── evals/
     ├── evals.json                   # Eval definitions
     └── fixtures/                    # Synthetic test data mirroring real source layouts
@@ -52,6 +56,7 @@ python -m unittest discover -s evals -p "test_*.py"
 ## Feature Branches
 
 - `001-usage-insights-report` — core report generation (complete, merged to main)
+- `002-copilot-pru-cost` — PRU and token cost comparison spec (PR open, spec phase)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
