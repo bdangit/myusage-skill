@@ -56,7 +56,7 @@ python -m unittest discover -s evals -p "test_*.py"
 ## Feature Branches
 
 - `001-usage-insights-report` — core report generation (complete, merged to main)
-- `002-copilot-pru-cost` — PRU and token cost comparison spec (PR open, spec phase)
+- `002-copilot-pru-cost` — PRU and token cost comparison spec (merged to main)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
