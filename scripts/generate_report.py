@@ -1158,7 +1158,13 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     # --- Top insights ---
     top_tool = tool_labels[tool_sessions.index(max(tool_sessions))] if tool_sessions else "N/A"
     top_cat = max(cat_counts, key=lambda c: cat_counts[c]) if cat_counts else "N/A"
-    peak_hour_label = f"{peak_hour:02d}:00–{peak_hour+1:02d}:00"
+    def _fmt_ampm(h: int) -> str:
+        if h == 0: return "12 AM"
+        if h < 12: return f"{h} AM"
+        if h == 12: return "12 PM"
+        return f"{h - 12} PM"
+
+    peak_hour_label = f"{_fmt_ampm(peak_hour)}–{_fmt_ampm(peak_hour + 1)}"
 
     autonomous_pct = round(char_counts["autonomous"] / max(sum(char_counts.values()), 1) * 100)
     engaged_pct = round(char_counts["deeply_engaged"] / max(sum(char_counts.values()), 1) * 100)
@@ -1176,7 +1182,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         lines.append('<span class="heatmap-day-label"></span>')  # spacer for day label column
         for h in range(24):
             if h in _hm_hour_label_positions:
-                lines.append(f'<span class="heatmap-hour-tick">{h}</span>')
+                lines.append(f'<span class="heatmap-hour-tick">{_fmt_ampm(h)}</span>')
             else:
                 lines.append('<span class="heatmap-hour-tick heatmap-hour-tick-hidden"></span>')
         lines.append('</div>')
@@ -1188,7 +1194,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             for h in range(24):
                 count = heatmap[d][h]
                 opacity = count / _hm_max * (1.0 - 0.05) + 0.05
-                tooltip = f"{_heatmap_day_labels[d]} {h:02d}:00 \u2014 {count} messages"
+                tooltip = f"{_heatmap_day_labels[d]} {_fmt_ampm(h)} \u2014 {count} messages"
                 lines.append(
                     f'<div class="heatmap-cell" title="{tooltip}" '
                     f'style="background:{color};opacity:{opacity:.3f}"></div>'
@@ -1541,11 +1547,8 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
 
   .insight-grid {{
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: 1fr;
     gap: 20px;
-  }}
-  @media (max-width: 700px) {{
-    .insight-grid {{ grid-template-columns: 1fr; }}
   }}
 
   .insight-glance {{
@@ -1854,7 +1857,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         Peak hour: <strong style="color:var(--amber)">{peak_hour_label}</strong> with {peak_hour_count} messages
       </div>
     </div>
-    <div class="chart-card">
+    <div class="chart-card chart-card-wide">
       <h3 class="chart-title">Activity by Day of Week</h3>
       <div class="chart-wrap">
         <canvas id="dowChart"></canvas>
@@ -1863,7 +1866,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         Most active day: <strong style="color:var(--blue)">{peak_dow}</strong>
       </div>
     </div>
-    <div class="chart-card">
+    <div class="chart-card chart-card-wide">
       <h3 class="chart-title">Hourly Distribution (all days combined)</h3>
       <div class="chart-wrap">
         <canvas id="hourlyBar"></canvas>
@@ -2022,7 +2025,10 @@ const PURPLE = '#8b5cf6', BLUE = '#3b82f6', GREEN = '#10b981',
 const GREY = '#6b7280';
 const TOOL_COLORS = {js_obj(dict(zip(tool_names, tool_colors)))};
 const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const HOURS = Array.from({{length:24}}, (_,i) => String(i).padStart(2,'0')+':00');
+const HOURS = [
+  '12 AM','1 AM','2 AM','3 AM','4 AM','5 AM','6 AM','7 AM','8 AM','9 AM','10 AM','11 AM',
+  '12 PM','1 PM','2 PM','3 PM','4 PM','5 PM','6 PM','7 PM','8 PM','9 PM','10 PM','11 PM'
+];
 
 // ── Tool Doughnut ────────────────────────────────────────────────────────────
 new Chart(document.getElementById('toolDoughnut'), {{
