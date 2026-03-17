@@ -34,8 +34,9 @@ def _run_report(*extra_args, timeout=120):
     out_fd, out_path = tempfile.mkstemp(suffix=".html")
     os.close(out_fd)
     try:
-        # Always inject the Chart.js stub so tests work offline
-        stub_args = ["--chartjs-src", CHARTJS_STUB]
+        # Always inject the Chart.js stub so tests work offline.
+        # Use --days 0 (all time) because fixtures have fixed timestamps from the past.
+        stub_args = ["--chartjs-src", CHARTJS_STUB, "--days", "0"]
         cmd = [sys.executable, SCRIPT, "--output", out_path] + stub_args + list(extra_args)
         result = subprocess.run(
             cmd,
@@ -207,14 +208,14 @@ class TestEval004ModeAndModel(unittest.TestCase):
         self.assertEqual(rc, 0, f"Expected exit 0, got {rc}.\nstdout: {stdout}\nstderr: {stderr}")
         self.assertTrue(html, "HTML should not be empty")
 
-        # Model names should appear in the HTML
+        # Model names should appear in the HTML (normalized display names)
         self.assertIn(
-            "claude-haiku-4.5", html,
-            "HTML should contain model name 'claude-haiku-4.5' from VS Code session"
+            "Claude Haiku 4.5", html,
+            "HTML should contain normalized model name 'Claude Haiku 4.5' from VS Code session"
         )
         self.assertIn(
-            "claude-sonnet-4-6", html,
-            "HTML should contain model name 'claude-sonnet-4-6' from CLI sessions"
+            "Claude Sonnet 4.6", html,
+            "HTML should contain normalized model name 'Claude Sonnet 4.6' from CLI sessions"
         )
 
         # Mode labels should appear
@@ -269,9 +270,8 @@ class TestEval005Categories(unittest.TestCase):
             "HTML should contain 'Code Generation' category (session-codegen has write/implement/function content)"
         )
 
-        # Category charts should exist
+        # Category chart should exist (stacked bar removed in favour of AI themes when insights present)
         self.assertIn("catHorizBar", html, "HTML should contain category horizontal bar chart")
-        self.assertIn("catStackedBar", html, "HTML should contain category stacked bar chart")
 
         print(f"\n[EVAL-005] PASSED — stdout preview:\n{stdout[:400]}")
 

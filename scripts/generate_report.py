@@ -105,6 +105,15 @@ def _parse_unix_ms(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
 
 
+def _map_permission_mode(pm: Optional[str]) -> str:
+    """Map Claude Code permissionMode field to a canonical mode string."""
+    if pm == "plan":
+        return "plan"
+    if pm == "acceptEdits":
+        return "edit"
+    return "default"
+
+
 # ---------------------------------------------------------------------------
 # Parser: Claude Code
 # ---------------------------------------------------------------------------
@@ -161,6 +170,7 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
         output_tokens_total = 0
         has_token_data = False
         project_path: Optional[str] = None
+        permission_mode: Optional[str] = None  # first permissionMode seen on user entries
 
         for entry in entries:
             entry_type = entry.get("type", "")
@@ -171,6 +181,12 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
                 ts = _parse_iso_z(ts_str)
             except (ValueError, TypeError):
                 continue
+
+            # Capture permissionMode from user entries (top-level field)
+            if permission_mode is None and entry_type == "user":
+                raw_pm = entry.get("permissionMode")
+                if raw_pm is not None:
+                    permission_mode = raw_pm
 
             if entry_type == "user":
                 msg_obj = entry.get("message", {})
@@ -245,7 +261,7 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
             messages=messages,
             message_count=len(user_msgs),
             model=model,
-            mode=None,  # Claude Code is always agentic; no ask/agent split in data
+            mode=_map_permission_mode(permission_mode),
             input_tokens=input_tokens_total if has_token_data else None,
             output_tokens=output_tokens_total if has_token_data else None,
             tool_call_count=tool_call_count,
@@ -294,7 +310,7 @@ def parse_copilot_vscode(vscode_dir: str) -> List[Session]:
         input_state = data.get("inputState", {})
         mode_obj = input_state.get("mode", {})
         raw_mode = mode_obj.get("id")
-        mode = raw_mode if raw_mode in ("agent", "ask") else None
+        mode = raw_mode if raw_mode in ("agent", "ask", "autopilot") else None
 
         # Model
         selected_model = input_state.get("selectedModel", {})
@@ -793,7 +809,7 @@ def build_report(all_sessions: List[Session]) -> InsightsReport:
     )
 
 
-def extract_data(report: InsightsReport, all_sessions: List[Session]) -> str:
+def extract_data(report: InsightsReport, all_sessions: List[Session], days_filter: Optional[int] = None) -> str:
     """
     Extract structured session data as a JSON string for Claude to read and generate insights.
     Returns a pretty-printed JSON string.
@@ -901,14 +917,15 @@ def extract_data(report: InsightsReport, all_sessions: List[Session]) -> str:
         for proj, cnt in sorted(project_counts.items(), key=lambda x: -x[1])[:10]
     ]
 
-    # Models
+    # Models (normalized)
     model_counts: Dict[str, int] = {}
     for s in all_sessions:
         if s.model:
-            model_counts[s.model] = model_counts.get(s.model, 0) + 1
+            canonical = normalize_model_name(s.model)
+            model_counts[canonical] = model_counts.get(canonical, 0) + 1
 
-    # 25 most recent sessions with up to 6 user messages each (truncated to 300 chars)
-    recent = sorted(all_sessions, key=lambda s: s.start_time, reverse=True)[:25]
+    # All sessions sorted by recency (across all tools), up to 6 user messages each (truncated to 300 chars)
+    recent = sorted(all_sessions, key=lambda s: s.start_time, reverse=True)
     conversations = []
     for s in recent:
         user_msgs = [
@@ -932,6 +949,13 @@ def extract_data(report: InsightsReport, all_sessions: List[Session]) -> str:
             "messages": msg_list,
         })
 
+    if days_filter == 180:
+        data_window = "6 months"
+    elif days_filter:
+        data_window = f"{days_filter} days"
+    else:
+        data_window = "all time"
+
     data = {
         "summary": {
             "total_sessions": total_sessions,
@@ -939,6 +963,8 @@ def extract_data(report: InsightsReport, all_sessions: List[Session]) -> str:
             "date_range_start": date_range_start,
             "date_range_end": date_range_end,
             "days_of_history": days_of_history,
+            "days_limit": days_filter,
+            "data_window": data_window,
             "tools": tools_summary,
             "peak_hour": peak_hour_label,
             "peak_day": peak_day,
@@ -957,7 +983,7 @@ def extract_data(report: InsightsReport, all_sessions: List[Session]) -> str:
 
 
 def load_insights(path: str) -> dict:
-    """Load Claude-generated insights JSON from path. Returns dict with headline and sections."""
+    """Load AI-generated insights JSON from path. Returns dict with headline and sections."""
     try:
         with open(os.path.expanduser(path), "r", encoding="utf-8") as fh:
             data = json.load(fh)
@@ -1010,6 +1036,62 @@ CHARACTER_LABELS = {
 }
 
 
+def normalize_model_name(model: str) -> str:
+    """Normalize raw model identifiers to human-readable display names.
+
+    Handles copilot/ prefix stripping, date suffix stripping, claude-* patterns,
+    GPT patterns, and o-series models.
+    """
+    import re as _re
+    s = model.strip()
+
+    # Strip copilot/ prefix
+    if s.startswith("copilot/"):
+        s = s[len("copilot/"):]
+
+    # Normalize dot-separated versions: 4.5 → 4-5 (before other patterns)
+    s = _re.sub(r'(\d+)\.(\d+)', r'\1-\2', s)
+
+    # Strip trailing date suffix: -YYYYMMDD
+    s = _re.sub(r'-\d{8}$', '', s)
+
+    # claude-{name}-{major}-{minor}  e.g. claude-haiku-4-5, claude-sonnet-4-6
+    m = _re.match(r'^claude-([a-z]+(?:-[a-z]+)*)-(\d+)-(\d+)$', s)
+    if m:
+        name = ' '.join(w.capitalize() for w in m.group(1).split('-'))
+        return f"Claude {name} {m.group(2)}.{m.group(3)}"
+
+    # claude-{major}-{minor}-{name}  e.g. claude-3-5-sonnet
+    m = _re.match(r'^claude-(\d+)-(\d+)-([a-z]+(?:-[a-z]+)*)$', s)
+    if m:
+        name = ' '.join(w.capitalize() for w in m.group(3).split('-'))
+        return f"Claude {m.group(1)}.{m.group(2)} {name}"
+
+    # claude-{name}-{major}  e.g. claude-opus-4
+    m = _re.match(r'^claude-([a-z]+(?:-[a-z]+)*)-(\d+)$', s)
+    if m:
+        name = ' '.join(w.capitalize() for w in m.group(1).split('-'))
+        return f"Claude {name} {m.group(2)}"
+
+    # claude-{name}  e.g. claude-opus
+    m = _re.match(r'^claude-([a-z]+(?:-[a-z]+)*)$', s)
+    if m:
+        return "Claude " + ' '.join(w.capitalize() for w in m.group(1).split('-'))
+
+    # gpt-4o, gpt-4-turbo
+    m = _re.match(r'^gpt-(\S+)$', s, _re.IGNORECASE)
+    if m:
+        parts = m.group(1).split('-')
+        return 'GPT-' + ' '.join(p.capitalize() if not p[0].isdigit() else p for p in parts)
+
+    # o3-mini, o1-preview
+    m = _re.match(r'^(o\d+)(?:-([a-z]+))?$', s, _re.IGNORECASE)
+    if m:
+        return f"{m.group(1)} {m.group(2).capitalize()}" if m.group(2) else m.group(1)
+
+    return s
+
+
 def _local_dt(dt: datetime, tz_info) -> datetime:
     """Convert a UTC-aware datetime to local timezone."""
     if tz_info is None:
@@ -1017,7 +1099,7 @@ def _local_dt(dt: datetime, tz_info) -> datetime:
     return dt.astimezone(tz_info)
 
 
-def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[str] = None, insights: Optional[dict] = None) -> None:
+def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[str] = None, insights: Optional[dict] = None, days_filter: Optional[int] = None) -> None:
     """Fetch Chart.js (or use provided source) and render the full HTML report."""
     if chartjs_src is None:
         print("Fetching Chart.js from CDN ...", file=sys.stderr)
@@ -1106,32 +1188,43 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     cat_values = [cat_counts.get(c, 0) for c in present_cats]
     cat_colors_list = [CATEGORY_COLORS.get(c, "#6b7280") for c in present_cats]
 
-    # Per-tool category breakdown
-    tool_cat_data: Dict[str, Dict[str, int]] = {}
-    for tool in tool_names:
-        snap = report.snapshots[tool]
-        tcd2: Dict[str, int] = {}
-        for s in snap.sessions:
-            tcd2[s.category] = tcd2.get(s.category, 0) + 1
-        tool_cat_data[tool] = tcd2
-
     # --- Mode data ---
-    mode_data: Dict[str, Dict[str, int]] = {}  # tool -> {agent: n, ask: n}
+    MODE_LABELS = {
+        "plan": "Plan",
+        "edit": "Edit (Auto-accept)",
+        "default": "Default",
+        "agent": "Agent",
+        "ask": "Ask",
+        "autopilot": "Autopilot",
+    }
+    MODE_COLORS = {
+        "plan": "#f59e0b",
+        "edit": "#10b981",
+        "default": "#6b7280",
+        "agent": "#8b5cf6",
+        "ask": "#3b82f6",
+        "autopilot": "#ec4899",
+    }
+    mode_data: Dict[str, Dict[str, int]] = {}
     has_mode = False
     for tool in tool_names:
         snap = report.snapshots[tool]
-        agent_c = sum(1 for s in snap.sessions if s.mode == "agent")
-        ask_c = sum(1 for s in snap.sessions if s.mode == "ask")
-        none_c = sum(1 for s in snap.sessions if s.mode is None)
-        if agent_c + ask_c > 0:
+        counts: Dict[str, int] = {}
+        for s in snap.sessions:
+            key = s.mode if s.mode is not None else "none"
+            counts[key] = counts.get(key, 0) + 1
+        mode_data[tool] = counts
+        if any(v > 0 for k, v in counts.items() if k != "none"):
             has_mode = True
-        mode_data[tool] = {"agent": agent_c, "ask": ask_c, "none": none_c}
 
     # --- Model data ---
     model_counts: Dict[str, int] = {}
+    model_variants: Dict[str, set] = {}  # canonical → set of raw names
     for s in all_sessions:
         if s.model:
-            model_counts[s.model] = model_counts.get(s.model, 0) + 1
+            canonical = normalize_model_name(s.model)
+            model_counts[canonical] = model_counts.get(canonical, 0) + 1
+            model_variants.setdefault(canonical, set()).add(s.model)
     has_model = bool(model_counts)
     model_names = sorted(model_counts.keys(), key=lambda m: -model_counts[m])
     model_values = [model_counts[m] for m in model_names]
@@ -1154,6 +1247,14 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         date_range_str = f"{fmt_date(all_start)} → {fmt_date(all_end)}"
     else:
         date_range_str = "No data"
+
+    # --- Window note for header ---
+    if days_filter == 180:
+        window_note = " &nbsp;·&nbsp; 6-month window"
+    elif days_filter:
+        window_note = f" &nbsp;·&nbsp; {days_filter}-day window"
+    else:
+        window_note = " &nbsp;·&nbsp; all-time history"
 
     # --- Top insights ---
     top_tool = tool_labels[tool_sessions.index(max(tool_sessions))] if tool_sessions else "N/A"
@@ -1205,14 +1306,6 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
 
     heatmap_grid_html = _build_heatmap_html()
 
-    # Stacked bar per tool for categories
-    cat_stacked_datasets = []
-    for cat in present_cats:
-        cat_stacked_datasets.append({
-            "label": cat,
-            "data": [tool_cat_data.get(t, {}).get(cat, 0) for t in tool_names],
-            "backgroundColor": CATEGORY_COLORS.get(cat, "#6b7280"),
-        })
 
     # Per-tool char stacked
     char_stacked_datasets = []
@@ -1226,6 +1319,27 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     def js_list(lst) -> str:
         return json.dumps(lst)
 
+    def _html_escape(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+    def _md_inline_to_html(text: str) -> str:
+        """Convert inline markdown to HTML: **bold**, `code`, [link](url). Escapes all other text."""
+        import re as _re
+        pattern = _re.compile(r'\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|`([^`]+)`')
+        result = []
+        last = 0
+        for m in pattern.finditer(text):
+            result.append(_html_escape(text[last:m.start()]))
+            if m.group(1) is not None:
+                result.append(f'<a href="{_html_escape(m.group(2))}" target="_blank" rel="noopener">{_html_escape(m.group(1))}</a>')
+            elif m.group(3) is not None:
+                result.append(f'<strong>{_html_escape(m.group(3))}</strong>')
+            else:
+                result.append(f'<code>{_html_escape(m.group(4))}</code>')
+            last = m.end()
+        result.append(_html_escape(text[last:]))
+        return "".join(result)
+
     def js_obj(obj) -> str:
         return json.dumps(obj)
 
@@ -1234,7 +1348,8 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     if has_mode:
         for tool in tool_names:
             md = mode_data[tool]
-            if md["agent"] + md["ask"] == 0:
+            present = {k: v for k, v in md.items() if k != "none" and v > 0}
+            if not present:
                 continue
             tl = TOOL_LABELS.get(tool, tool)
             chart_id = f"modeChart_{tool}"
@@ -1249,12 +1364,26 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     # Model bar chart
     model_chart_html = ""
     if has_model:
-        model_chart_html = """
+        # Build variant footnote for grouped models
+        grouped = [(name, sorted(variants)) for name, variants in model_variants.items() if len(variants) > 1]
+        if grouped:
+            grouped_sorted = sorted(grouped, key=lambda x: -model_counts[x[0]])
+            variant_parts = [f"{name} ({', '.join(raw_list)})" for name, raw_list in grouped_sorted]
+            variant_footnote = (
+                f'<div style="margin-top:12px;font-size:0.78rem;color:var(--text-muted);line-height:1.6">'
+                f'<strong style="color:var(--text-muted)">Grouped variants:</strong> '
+                + " &nbsp;·&nbsp; ".join(f'<em>{_html_escape(p)}</em>' for p in variant_parts)
+                + "</div>"
+            )
+        else:
+            variant_footnote = ""
+        model_chart_html = f"""
       <div class="chart-card chart-card-wide">
         <h3 class="chart-title">Model Usage (sessions)</h3>
         <div class="chart-wrap">
           <canvas id="modelChart"></canvas>
         </div>
+        {variant_footnote}
       </div>"""
 
     # Token summary
@@ -1284,33 +1413,35 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     ins_headline = insights.get("headline", "")
     ins_sections = insights.get("sections", [])
     ins_at_a_glance = insights.get("at_a_glance", {})
+    ins_work_themes = insights.get("work_themes", [])
+    has_work_themes = bool(ins_work_themes)
 
-    def _html_escape(s: str) -> str:
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-
-    def _md_inline_to_html(text: str) -> str:
-        """Convert inline markdown to HTML: **bold**, `code`, [link](url). Escapes all other text."""
-        import re as _re
-        pattern = _re.compile(r'\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|`([^`]+)`')
-        result = []
-        last = 0
-        for m in pattern.finditer(text):
-            result.append(_html_escape(text[last:m.start()]))
-            if m.group(1) is not None:  # [text](url)
-                result.append(f'<a href="{_html_escape(m.group(2))}" target="_blank" rel="noopener">{_html_escape(m.group(1))}</a>')
-            elif m.group(3) is not None:  # **bold**
-                result.append(f'<strong>{_html_escape(m.group(3))}</strong>')
-            else:  # `code`
-                result.append(f'<code>{_html_escape(m.group(4))}</code>')
-            last = m.end()
-        result.append(_html_escape(text[last:]))
-        return "".join(result)
-
-    if ins_headline or ins_sections or ins_at_a_glance:
+    if ins_headline or ins_sections or ins_at_a_glance or has_work_themes:
         # Headline
         headline_html = ""
         if ins_headline:
             headline_html = f'<div class="insight-headline"><div class="insight-headline-text">{_html_escape(ins_headline)}</div></div>'
+
+        # Work Themes grid
+        work_themes_html = ""
+        if has_work_themes:
+            theme_cards = ""
+            for theme in ins_work_themes:
+                tname = _html_escape(str(theme.get("name", "")))
+                tdesc = _html_escape(str(theme.get("description", "")))
+                tcount = theme.get("session_count")
+                tcount_html = f'<div class="work-theme-count">{int(tcount)} sessions</div>' if tcount else ""
+                theme_cards += f"""<div class="work-theme-card">
+  <div class="work-theme-name">{tname}</div>
+  <div class="work-theme-desc">{tdesc}</div>
+  {tcount_html}
+</div>
+"""
+            work_themes_html = f"""
+<div class="work-themes-section">
+  <div class="work-themes-label">Work Themes</div>
+  <div class="work-themes-grid">{theme_cards}</div>
+</div>"""
 
         def _glance_body(text: str) -> str:
             """Render glance text: split into bullets if multiple sentences, else plain <p>."""
@@ -1352,8 +1483,10 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
                 body_html = f'<p>{_html_escape(sec.get("body", ""))}</p>'
             cards_html += f'<div class="insight-card{extra_class}"><h3>{title}</h3>{body_html}</div>\n'
 
-        insights_body_html = f"""{headline_html}{glance_html}<div class="insight-grid">{cards_html}</div>"""
+        grid_html = f'<div class="insight-grid">{cards_html}</div>' if cards_html else ""
+        insights_body_html = f"""{headline_html}{work_themes_html}{glance_html}{grid_html}"""
     else:
+        has_work_themes = False
         insights_body_html = '<div class="insight-placeholder">Generate insights by running the skill and asking: &#8220;generate my AI usage report with insights&#8221;</div>'
 
     html = f"""<!DOCTYPE html>
@@ -1517,6 +1650,47 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
   /* No data */
   .no-data {{ text-align: center; padding: 60px; color: var(--text-muted); }}
   .no-data-icon {{ font-size: 3rem; margin-bottom: 16px; }}
+
+  /* Work Themes */
+  .work-themes-section {{
+    margin-bottom: 28px;
+  }}
+  .work-themes-label {{
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--purple);
+    margin-bottom: 12px;
+  }}
+  .work-themes-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+  }}
+  .work-theme-card {{
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }}
+  .work-theme-name {{
+    font-weight: 600;
+    color: var(--purple);
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+  }}
+  .work-theme-desc {{
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }}
+  .work-theme-count {{
+    font-size: 0.8rem;
+    color: var(--amber);
+    font-weight: 500;
+  }}
 
   /* AI Insights */
   .insight-headline {{
@@ -1727,7 +1901,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     <div class="header-inner">
       <div>
         <div class="header-title">My AI Usage Insights</div>
-        <div class="header-subtitle">Personal analytics across all your AI tools &nbsp;·&nbsp; {date_range_str}</div>
+        <div class="header-subtitle">Personal analytics across all your AI tools &nbsp;·&nbsp; {date_range_str}{window_note}</div>
       </div>
       <div class="header-meta">
         <div class="tz">Timezone: {report.local_timezone}</div>
@@ -1746,7 +1920,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
       <a class="nav-link" href="#patterns">Patterns</a>
       <a class="nav-link" href="#character">Session Character</a>
       <a class="nav-link" href="#insights">AI Insights</a>
-      <a class="nav-link" href="#categories">Categories</a>
+      {'<a class="nav-link" href="#categories">Categories</a>' if not has_work_themes else ''}
       {'<a class="nav-link" href="#mode-model">Mode & Model</a>' if has_mode or has_model else ''}
     </div>
   </div>
@@ -1931,54 +2105,33 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
 <section class="section" id="insights">
   <div class="section-header">
     <div class="section-title">AI Insights</div>
-    <div class="section-desc">Claude-generated narrative observations about your AI usage habits</div>
+    <div class="section-desc">AI-generated narrative observations about your AI usage habits</div>
   </div>
   {insights_body_html}
 </section>
 
-<!-- SECTION: CATEGORIES -->
+{"" if has_work_themes else f"""<!-- SECTION: CATEGORIES -->
 <section class="section" id="categories">
   <div class="section-header">
     <div class="section-title">Conversation Categories</div>
-    <div class="section-desc">What you actually use AI for</div>
+    <div class="section-desc">Keyword-based breakdown of what you use AI for</div>
   </div>
-
   <div class="chart-grid">
-    <div class="chart-card">
-      <h3 class="chart-title">Category Breakdown (all tools)</h3>
+    <div class="chart-card chart-card-wide">
+      <h3 class="chart-title">Category Breakdown (sorted by frequency)</h3>
       <div class="chart-wrap chart-wrap-tall">
         <canvas id="catHorizBar"></canvas>
       </div>
     </div>
-    <div class="chart-card">
-      <h3 class="chart-title">Per-Tool Category Split</h3>
-      <div class="chart-wrap chart-wrap-tall">
-        <canvas id="catStackedBar"></canvas>
-      </div>
-    </div>
-    <div class="chart-card chart-card-wide">
-      <h3 class="chart-title">Category Summary</h3>
-      <table class="data-table">
-        <thead><tr><th>Category</th><th>Sessions</th><th>%</th></tr></thead>
-        <tbody>
-          {"".join(f"""
-          <tr>
-            <td><span class="badge" style="background:rgba({','.join(str(int(CATEGORY_COLORS.get(c,'#6b7280').lstrip('#')[i:i+2],16)) for i in (0,2,4))},0.2);color:{CATEGORY_COLORS.get(c,'#6b7280')}">{c}</span></td>
-            <td>{cat_counts.get(c,0)}</td>
-            <td>{round(cat_counts.get(c,0) / max(sum(cat_counts.values()),1) * 100)}%</td>
-          </tr>""" for c in present_cats)}
-        </tbody>
-      </table>
-    </div>
   </div>
-</section>
+</section>"""}
 
 <!-- SECTION: MODE & MODEL -->
 {"" if not has_mode and not has_model else f"""
 <section class="section" id="mode-model">
   <div class="section-header">
     <div class="section-title">Mode &amp; Model</div>
-    <div class="section-desc">Agent vs. ask mode and model usage breakdown</div>
+    <div class="section-desc">Session mode and model breakdown</div>
   </div>
 
   <div class="chart-grid">
@@ -2149,25 +2302,8 @@ new Chart(document.getElementById('catHorizBar'), {{
   }}
 }});
 
-// ── Category Stacked Bar (per tool) ─────────────────────────────────────────
-new Chart(document.getElementById('catStackedBar'), {{
-  type: 'bar',
-  data: {{
-    labels: {js_list(tool_labels)},
-    datasets: {js_obj(cat_stacked_datasets)}
-  }},
-  options: {{
-    responsive: true, maintainAspectRatio: false,
-    plugins: {{ legend: {{ position: 'bottom', labels: {{ padding: 10, usePointStyle: true, font: {{ size: 10 }} }} }} }},
-    scales: {{
-      x: {{ stacked: true, grid: {{ display: false }} }},
-      y: {{ stacked: true, grid: {{ color: '#2d3148' }} }}
-    }}
-  }}
-}});
-
 // ── Mode Charts ──────────────────────────────────────────────────────────────
-{_render_mode_charts_js(tool_names, mode_data, has_mode)}
+{_render_mode_charts_js(tool_names, mode_data, has_mode, MODE_LABELS, MODE_COLORS)}
 
 // ── Model Chart ──────────────────────────────────────────────────────────────
 {f"""
@@ -2201,21 +2337,29 @@ def _render_mode_charts_js(
     tool_names: List[str],
     mode_data: Dict[str, Dict[str, int]],
     has_mode: bool,
+    mode_labels: Optional[Dict[str, str]] = None,
+    mode_colors: Optional[Dict[str, str]] = None,
 ) -> str:
     if not has_mode:
         return "// No mode data"
+    _labels = mode_labels or {}
+    _colors = mode_colors or {}
     lines = []
     for tool in tool_names:
         md = mode_data.get(tool, {})
-        if md.get("agent", 0) + md.get("ask", 0) == 0:
+        present = {k: v for k, v in md.items() if k != "none" and v > 0}
+        if not present:
             continue
         chart_id = f"modeChart_{tool}"
+        labels = json.dumps([_labels.get(k, k.capitalize()) for k in present])
+        values = json.dumps(list(present.values()))
+        colors = json.dumps([_colors.get(k, "#6b7280") for k in present])
         lines.append(f"""
 new Chart(document.getElementById('{chart_id}'), {{
   type: 'doughnut',
   data: {{
-    labels: ['Agent', 'Ask'],
-    datasets: [{{ data: [{md.get('agent', 0)}, {md.get('ask', 0)}], backgroundColor: ['#8b5cf6', '#3b82f6'], borderWidth: 2, borderColor: '#1a1d27', hoverOffset: 6 }}]
+    labels: {labels},
+    datasets: [{{ data: {values}, backgroundColor: {colors}, borderWidth: 2, borderColor: '#1a1d27', hoverOffset: 6 }}]
   }},
   options: {{
     responsive: true, maintainAspectRatio: false,
@@ -2241,8 +2385,8 @@ def main() -> None:
     parser.add_argument(
         "--days",
         type=int,
-        default=None,
-        help="Limit history to the most recent N days",
+        default=180,
+        help="Limit history to the most recent N days (default: 180 = 6 months; use 0 for all time)",
     )
     parser.add_argument(
         "--claude-dir",
@@ -2274,7 +2418,7 @@ def main() -> None:
         "--insights",
         default=None,
         metavar="PATH",
-        help="Path to a JSON file containing Claude-generated narrative insights to embed in the report.",
+        help="Path to a JSON file containing AI-generated narrative insights to embed in the report.",
     )
     args = parser.parse_args()
 
@@ -2286,10 +2430,12 @@ def main() -> None:
             print(f"Error: output directory does not exist: {output_dir}", file=sys.stderr)
             sys.exit(2)
 
-    # Cutoff time for --days filter
+    # Cutoff time for --days filter (0 means all time)
     cutoff: Optional[datetime] = None
-    if args.days is not None:
+    if args.days:  # 0 or None = no cutoff
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=args.days)
+    if not args.days:
+        args.days = None  # normalize 0 → None so window_note shows "all-time history"
 
     all_sessions: List[Session] = []
 
@@ -2343,7 +2489,7 @@ def main() -> None:
 
     # --- --extract mode: print JSON to stdout and exit ---
     if args.extract:
-        print(extract_data(report, all_sessions))
+        print(extract_data(report, all_sessions, days_filter=args.days))
         sys.exit(0)
 
     # --- Load insights if --insights provided ---
@@ -2365,7 +2511,7 @@ def main() -> None:
 
     output_path = os.path.expanduser(args.output)
     try:
-        render_html(report, output_path, chartjs_src=chartjs_src, insights=insights)
+        render_html(report, output_path, chartjs_src=chartjs_src, insights=insights, days_filter=args.days)
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(2)
