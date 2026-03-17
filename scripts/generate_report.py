@@ -1661,22 +1661,23 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
 
   /* Heatmap grid */
   .heatmap-grid-wrap {{
-    overflow-x: auto;
     padding-bottom: 4px;
     margin-top: 12px;
+    width: 100%;
   }}
   .heatmap-hour-labels {{
     display: flex;
     align-items: center;
-    gap: 2px;
-    margin-bottom: 2px;
+    gap: 3px;
+    margin-bottom: 3px;
   }}
   .heatmap-hour-tick {{
-    width: 20px;
+    flex: 1;
     text-align: center;
     font-size: 0.68rem;
     color: var(--text-muted);
-    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
   }}
   .heatmap-hour-tick-hidden {{
     visibility: hidden;
@@ -1684,8 +1685,8 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
   .heatmap-row {{
     display: flex;
     align-items: center;
-    gap: 2px;
-    margin-bottom: 2px;
+    gap: 3px;
+    margin-bottom: 3px;
   }}
   .heatmap-day-label {{
     width: 28px;
@@ -1696,15 +1697,15 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     padding-right: 4px;
   }}
   .heatmap-cell {{
-    width: 20px;
-    height: 20px;
-    border-radius: 3px;
-    flex-shrink: 0;
+    flex: 1;
+    aspect-ratio: 1;
+    border-radius: 4px;
     cursor: default;
     transition: transform 0.1s;
+    min-width: 0;
   }}
   .heatmap-cell:hover {{
-    transform: scale(1.3);
+    transform: scale(1.15);
     z-index: 1;
     position: relative;
   }}
