@@ -1,8 +1,10 @@
 <!-- Sync Impact Report
-Version change: 1.0.0 → 1.1.0 (added Principle V: Trunk-Based Development)
-Added sections: V. Trunk-Based Development
+Version change: 1.1.0 → 1.2.0 (added Principle VI: LLM-Agnostic Insights)
+Added sections: VI. LLM-Agnostic Insights
+Modified principles: none
+Removed sections: none
 Templates updated:
-  ✅ .claude/commands/speckit.implement.md — pre-execution branch guard added
+  ✅ .specify/templates/plan-template.md — Constitution Check updated with LLM-Agnostic Insights gate
 Deferred TODOs: none
 -->
 
@@ -34,8 +36,6 @@ When testing, evals MUST be validated against more than one agent.
 > **Approved exception**: Chart.js may be used as an inlined client-side asset in HTML report
 > output. It is not a runtime dependency of the skill itself — it is bundled into the generated
 > artifact. All other runtime, build, and parsing dependencies remain stdlib-only.
-
-
 
 The skill MUST use no external runtime dependencies unless no reasonable alternative exists.
 If a dependency is unavoidable, it MUST be justified in the Complexity Tracking section of the
@@ -81,6 +81,34 @@ has a complete spec before any implementation is attempted.
 - Implementation branches MUST have a merged spec branch in `main` before they are opened.
 - All PRs target `main`. No PR-to-PR merges.
 
+### VI. LLM-Agnostic Insights
+
+The skill and all generated output MUST NOT assume, reference, or hardcode a specific LLM
+vendor, model, or product name in any user-facing text, report content, labels, or chart
+titles. Vendor names (e.g., "Claude", "Copilot", "GPT") MUST only appear as data values
+derived from the user's own history files — never as baked-in assumptions.
+
+The skill SHOULD aspire to gather insights from as many AI tool sources as possible.
+New tool sources (chat history formats, CLI logs, IDE extensions) SHOULD be added
+incrementally as they are identified. Each supported source MUST be independently parseable
+and gracefully skipped when absent.
+
+**Rationale**: This skill serves any developer using any AI tool. Hardcoding vendor names
+creates implicit bias, reduces trust for non-Claude users, and requires code changes whenever
+the AI tooling landscape shifts. Aspiring to broad tool coverage ensures the skill remains
+useful as the ecosystem evolves.
+
+**Rules**:
+
+- Report labels, headings, and chart axes MUST use neutral terminology (e.g., "AI Tool",
+  "Model", "Tool Source") rather than any specific product name.
+- Vendor or model names appearing in the report MUST originate exclusively from parsed
+  history data, not from hardcoded strings in the generator.
+- Each data source parser MUST be independently testable and MUST NOT fail the report if
+  its source directory is absent or empty.
+- Adding a new tool source MUST include at least one eval fixture and one eval covering
+  that source's parsing path.
+
 ## Quality Gates
 
 Every feature branch MUST satisfy the following gates before merge:
@@ -90,6 +118,8 @@ Every feature branch MUST satisfy the following gates before merge:
 - **Agent parity**: Evals validated on Claude Code AND at least one other supported agent CLI.
 - **Dependency audit**: Zero net-new runtime dependencies, or each is justified in plan.md.
 - **Complexity audit**: No unapproved abstractions; any violation documented in Complexity Tracking.
+- **LLM-agnostic audit**: No vendor names hardcoded in generator output; all report labels use
+  neutral terminology.
 
 ## Governance
 
@@ -105,4 +135,4 @@ This constitution supersedes all other practices and preferences. Amendments req
 
 All PRs must verify compliance with Quality Gates before merge.
 
-**Version**: 1.1.0 | **Ratified**: 2026-03-14 | **Last Amended**: 2026-03-14
+**Version**: 1.2.0 | **Ratified**: 2026-03-14 | **Last Amended**: 2026-03-17
