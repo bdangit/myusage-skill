@@ -1,0 +1,56 @@
+{
+  "skill_name": "myusage-skill",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run the report generator pointing at the fixture claude_code directory (evals/fixtures/claude_code) and the fixture copilot_vscode directory (evals/fixtures/copilot_vscode). Use --claude-dir and --vscode-dir flags. Verify the generated HTML report contains a cross-tool section showing: (1) Claude Code with 4 sessions, (2) Copilot VS Code with 1 session, (3) total of 5 sessions across all tools. The report must show session counts that match the input fixture data exactly.",
+      "expected_output": "The generated HTML report contains session counts: Claude Code = 4 sessions, Copilot VS Code = 1 session, total sessions = 5. The tool usage split section renders a chart and table with these values. No error is thrown when only two of three data sources have data.",
+      "files": [
+        "evals/fixtures/claude_code/project-alpha/session-autonomous.jsonl",
+        "evals/fixtures/claude_code/project-alpha/session-engaged.jsonl",
+        "evals/fixtures/claude_code/project-alpha/session-debug.jsonl",
+        "evals/fixtures/claude_code/project-alpha/session-codegen.jsonl",
+        "evals/fixtures/copilot_vscode/workspace-abc123/chatSessions/session-vscode-001.json"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Run the report generator pointing at the fixture claude_code directory (evals/fixtures/claude_code) only using --claude-dir flag. All four fixture sessions have timestamps starting at 09:xx or 10:xx or 11:xx or 14:xx UTC. Verify that the hourly heatmap in the generated HTML report identifies the peak hour correctly — the hour with the most user messages across all sessions should be highlighted or called out in the patterns section.",
+      "expected_output": "The generated HTML report contains an hourly heatmap section. The peak hour callout identifies the hour with the most user messages. For the given fixtures (messages at 09:xx, 10:xx, 11:xx, 14:xx), the peak hour is correctly identified among those hours. The patterns section renders without errors.",
+      "files": [
+        "evals/fixtures/claude_code/project-alpha/session-autonomous.jsonl",
+        "evals/fixtures/claude_code/project-alpha/session-engaged.jsonl",
+        "evals/fixtures/claude_code/project-alpha/session-debug.jsonl",
+        "evals/fixtures/claude_code/project-alpha/session-codegen.jsonl"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Run the report generator pointing at the fixture copilot_cli directory (evals/fixtures/copilot_cli) using the --copilot-cli-dir flag. The CLI fixtures contain two sessions: session-cli-001 (3 user messages, 10 tool calls, ~8 min) and session-cli-002 (6 user messages at ~60s intervals, 0 tool calls, ~6 min). Verify the generated HTML report contains both 'Autonomous' and 'Deeply Engaged' labels in the session character section, correctly classifying the two sessions.",
+      "expected_output": "The generated HTML report contains a session character section that includes both the 'Autonomous' label (for session-cli-001: 10 tool calls / 3 messages = 3.33 >= 3, duration >= 5 min) and 'Deeply Engaged' label (for session-cli-002: 6 messages >= 5, median gap ~60s < 120s, 0 tool calls). The character breakdown chart and table render correctly.",
+      "files": [
+        "evals/fixtures/copilot_cli/session-cli-001/events.jsonl",
+        "evals/fixtures/copilot_cli/session-cli-002/events.jsonl"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Run the report generator pointing at both the fixture copilot_vscode directory (evals/fixtures/copilot_vscode) and copilot_cli directory (evals/fixtures/copilot_cli) using --vscode-dir and --copilot-cli-dir flags. Verify the generated HTML report contains model names 'claude-haiku-4.5' (from VS Code session) and 'claude-sonnet-4-6' (from CLI sessions), and contains mode labels 'agent' or 'Agent' (from VS Code agent mode and CLI agentMode=true).",
+      "expected_output": "The generated HTML report contains a mode and model section. The model chart or table includes 'claude-haiku-4.5' from the Copilot VS Code session and 'claude-sonnet-4-6' from the Copilot CLI sessions. Mode data shows agent mode usage. The section is not omitted since mode and model metadata is available from both sources.",
+      "files": [
+        "evals/fixtures/copilot_vscode/workspace-abc123/chatSessions/session-vscode-001.json",
+        "evals/fixtures/copilot_cli/session-cli-001/events.jsonl",
+        "evals/fixtures/copilot_cli/session-cli-002/events.jsonl"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Run the report generator pointing at the fixture claude_code directory (evals/fixtures/claude_code) using --claude-dir flag. The fixtures include session-debug.jsonl (content about 'error', 'traceback', 'exception', 'fix', 'broken') and session-codegen.jsonl (content about 'write', 'implement', 'function', 'generate', 'class', 'script'). Verify the generated HTML report contains both 'Debugging' and 'Code Generation' as category labels in the conversation categories section, correctly assigning each session to its expected bucket.",
+      "expected_output": "The generated HTML report contains a categories section. 'Debugging' appears as a category label assigned to session-debug-001 (debug-heavy content). 'Code Generation' appears as a category label assigned to session-codegen-001 (code generation content). The category chart and table render correctly with both categories visible.",
+      "files": [
+        "evals/fixtures/claude_code/project-alpha/session-debug.jsonl",
+        "evals/fixtures/claude_code/project-alpha/session-codegen.jsonl"
+      ]
+    }
+  ]
+}

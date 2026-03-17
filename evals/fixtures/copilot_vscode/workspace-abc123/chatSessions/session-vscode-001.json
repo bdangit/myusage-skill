@@ -1,0 +1,78 @@
+{
+  "sessionId": "session-vscode-001",
+  "creationDate": 1736942400000,
+  "lastMessageDate": 1736943000000,
+  "customTitle": "Implement authentication middleware",
+  "inputState": {
+    "mode": {
+      "id": "agent"
+    },
+    "selectedModel": {
+      "metadata": {
+        "id": "claude-haiku-4.5"
+      }
+    }
+  },
+  "requests": [
+    {
+      "timestamp": 1736942400000,
+      "modelId": "claude-haiku-4.5",
+      "timeSpentWaiting": 1200,
+      "message": {
+        "parts": [
+          {
+            "text": "Can you implement a JWT authentication middleware for my Express app?"
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": 1736942520000,
+      "modelId": "claude-haiku-4.5",
+      "timeSpentWaiting": 980,
+      "message": {
+        "parts": [
+          {
+            "text": "Now add refresh token support to the middleware you just created."
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": 1736942640000,
+      "modelId": "claude-haiku-4.5",
+      "timeSpentWaiting": 1100,
+      "message": {
+        "parts": [
+          {
+            "text": "Write unit tests for the authentication middleware covering valid tokens, expired tokens, and missing tokens."
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": 1736942760000,
+      "modelId": "claude-haiku-4.5",
+      "timeSpentWaiting": 1050,
+      "message": {
+        "parts": [
+          {
+            "text": "Add rate limiting to the auth endpoints. Implement it as a separate middleware function."
+          }
+        ]
+      }
+    },
+    {
+      "timestamp": 1736942880000,
+      "modelId": "claude-haiku-4.5",
+      "timeSpentWaiting": 900,
+      "message": {
+        "parts": [
+          {
+            "text": "Generate the README documentation for these middleware functions explaining usage and configuration."
+          }
+        ]
+      }
+    }
+  ]
+}
