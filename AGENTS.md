@@ -1,11 +1,17 @@
 # myusage-skill Development Guidelines
 
-Last updated: 2026-03-14
+Last updated: 2026-03-17
 
 ## What this repo is
 
-A Claude Code / Copilot skill that generates a self-contained HTML insights report from local
-AI tool chat history (Claude Code, Copilot VS Code, Copilot CLI).
+A skill (runnable by any LLM agent — Claude Code, GitHub Copilot, or other) that generates a
+self-contained HTML insights report from local AI tool chat history (Claude Code, Copilot VS Code, Copilot CLI).
+
+## Design Principles
+
+- **LLM-agnostic**: The skill and generated report must not assume a specific LLM or vendor. Avoid hardcoding "Claude", "Copilot", or any product name in user-facing text. The agent invoking the skill could be Claude, Copilot, or any future model.
+- **Stdlib only**: No pip dependencies — keep the report generator runnable with bare Python 3.8+.
+- **Self-contained output**: The generated HTML report must work with no external network requests after generation (Chart.js inlined at build time).
 
 ## Active Technologies
 
@@ -45,7 +51,7 @@ python -m unittest discover -s evals -p "test_*.py"
 
 ## Feature Branches
 
-- `001-usage-insights-report` — core report generation (spec + plan complete, implementation pending)
+- `001-usage-insights-report` — core report generation (complete, merged to main)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

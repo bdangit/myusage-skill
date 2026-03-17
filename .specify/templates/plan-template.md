@@ -36,6 +36,7 @@
 - [ ] **Zero Dependencies**: Zero net-new runtime dependencies, or each is listed and justified below.
 - [ ] **Simplicity**: No premature abstractions; design is the minimum needed for the feature.
 - [ ] **Trunk-Based**: This is a spec branch (docs only). Implementation will happen on a separate `-impl` branch after this spec is merged to `main`.
+- [ ] **LLM-Agnostic Insights**: No vendor names hardcoded in generator output; report labels use neutral terminology; each new tool source has an eval fixture.
 
 ## Project Structure
 
