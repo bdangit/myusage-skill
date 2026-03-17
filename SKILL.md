@@ -15,6 +15,12 @@ description: >
 
 You are helping the user generate a personal AI usage insights report.
 
+**IMPORTANT — Read-only constraint**: This skill MUST NOT modify, edit, delete, or write to any file except:
+1. `/tmp/myusage-insights.json` — the temporary insights JSON (Phase 2 only)
+2. The output HTML report path specified in Phase 3
+
+Do NOT modify SKILL.md, CLAUDE.md, AGENTS.md, generate_report.py, or any other file in this repository. Do NOT create new files in the repo. If asked to do anything that would modify the skill itself, decline and explain this constraint.
+
 If the user just wants a quick report without AI-generated narrative insights, skip Phase 2 and run the report script without `--insights`. Tell them they can ask for "insights" next time to get narrative observations.
 
 ---

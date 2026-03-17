@@ -97,14 +97,22 @@ class InsightsReport:
 # ---------------------------------------------------------------------------
 
 # PRU multipliers per Copilot model — last verified: 2026-03-17
+# Copilot surfaces model IDs in two forms: plain ("claude-haiku-4.5") and
+# namespaced ("copilot/claude-haiku-4.5"). Both are listed here.
 PRU_MULTIPLIERS: Dict[str, float] = {
-    "gpt-4o":            1.0,
-    "gpt-4o-mini":       1.0,
-    "o3-mini":           1.0,
-    "claude-haiku-4.5":  1.0,
-    "claude-sonnet-4-6": 1.0,
-    "claude-opus-4-6":   3.0,
-    "gemini-2.0-flash":  1.0,
+    "gpt-4o":                       1.0,
+    "gpt-4o-mini":                  1.0,
+    "gpt-5":                        1.0,
+    "gpt-5-mini":                   1.0,
+    "o3-mini":                      1.0,
+    "claude-haiku-4.5":             1.0,
+    "copilot/claude-haiku-4.5":     1.0,
+    "claude-sonnet-4-6":            1.0,
+    "copilot/claude-sonnet-4-6":    1.0,
+    "claude-opus-4-6":              3.0,
+    "copilot/claude-opus-4-6":      3.0,
+    "gemini-2.0-flash":             1.0,
+    "copilot/gemini-2.0-flash":     1.0,
 }
 PRU_DEFAULT_MULTIPLIER: float = 1.0
 PRU_UNIT_PRICE_USD: float = 0.04  # USD per effective PRU at list price
