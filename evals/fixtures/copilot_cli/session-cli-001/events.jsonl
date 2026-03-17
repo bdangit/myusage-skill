@@ -1,0 +1,18 @@
+{"type":"session.start","sessionId":"session-cli-001","startTime":"2026-01-15T09:00:00Z","selectedModel":"claude-sonnet-4-6","copilotVersion":"1.2.0","context":{"cwd":"/home/user/project-beta","branch":"main","repository":"project-beta"}}
+{"type":"user.message","timestamp":"2026-01-15T09:00:30Z","sessionId":"session-cli-001","data":{"content":"Refactor the entire payment module to use the new Stripe API. Update all the integration tests too.","agentMode":true}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:00:45Z","sessionId":"session-cli-001","data":{"toolName":"read_file","toolCallId":"tc_001"}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:01:00Z","sessionId":"session-cli-001","data":{"toolName":"write_file","toolCallId":"tc_002"}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:01:30Z","sessionId":"session-cli-001","data":{"toolName":"bash","toolCallId":"tc_003"}}
+{"type":"assistant.usage","timestamp":"2026-01-15T09:01:45Z","sessionId":"session-cli-001","data":{"model":"claude-sonnet-4-6","inputTokens":1500,"outputTokens":2000,"cost":0.015}}
+{"type":"user.message","timestamp":"2026-01-15T09:02:00Z","sessionId":"session-cli-001","data":{"content":"Good, now migrate the webhook handlers to the new format.","agentMode":true}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:02:15Z","sessionId":"session-cli-001","data":{"toolName":"read_file","toolCallId":"tc_004"}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:02:30Z","sessionId":"session-cli-001","data":{"toolName":"write_file","toolCallId":"tc_005"}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:03:00Z","sessionId":"session-cli-001","data":{"toolName":"bash","toolCallId":"tc_006"}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:03:30Z","sessionId":"session-cli-001","data":{"toolName":"read_file","toolCallId":"tc_007"}}
+{"type":"assistant.usage","timestamp":"2026-01-15T09:03:45Z","sessionId":"session-cli-001","data":{"model":"claude-sonnet-4-6","inputTokens":2000,"outputTokens":2500,"cost":0.022}}
+{"type":"user.message","timestamp":"2026-01-15T09:04:00Z","sessionId":"session-cli-001","data":{"content":"Run all the integration tests and fix anything that fails.","agentMode":true}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:04:15Z","sessionId":"session-cli-001","data":{"toolName":"bash","toolCallId":"tc_008"}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:04:45Z","sessionId":"session-cli-001","data":{"toolName":"write_file","toolCallId":"tc_009"}}
+{"type":"tool.execution_start","timestamp":"2026-01-15T09:05:15Z","sessionId":"session-cli-001","data":{"toolName":"bash","toolCallId":"tc_010"}}
+{"type":"assistant.usage","timestamp":"2026-01-15T09:05:30Z","sessionId":"session-cli-001","data":{"model":"claude-sonnet-4-6","inputTokens":2500,"outputTokens":3000,"cost":0.028}}
+{"type":"session.shutdown","timestamp":"2026-01-15T09:08:00Z","sessionId":"session-cli-001","data":{"totalApiDurationMs":480000,"currentModel":"claude-sonnet-4-6"}}

@@ -1,0 +1,14 @@
+{"type":"session.start","sessionId":"session-cli-002","startTime":"2026-01-15T15:00:00Z","selectedModel":"claude-sonnet-4-6","copilotVersion":"1.2.0","context":{"cwd":"/home/user/project-gamma","branch":"feature/auth","repository":"project-gamma"}}
+{"type":"user.message","timestamp":"2026-01-15T15:00:30Z","sessionId":"session-cli-002","data":{"content":"Explain how OAuth2 authorization code flow works step by step.","agentMode":false}}
+{"type":"assistant.usage","timestamp":"2026-01-15T15:00:45Z","sessionId":"session-cli-002","data":{"model":"claude-sonnet-4-6","inputTokens":300,"outputTokens":500,"cost":0.004}}
+{"type":"user.message","timestamp":"2026-01-15T15:01:30Z","sessionId":"session-cli-002","data":{"content":"What is the difference between the authorization code flow and the implicit flow?","agentMode":false}}
+{"type":"assistant.usage","timestamp":"2026-01-15T15:01:45Z","sessionId":"session-cli-002","data":{"model":"claude-sonnet-4-6","inputTokens":500,"outputTokens":700,"cost":0.006}}
+{"type":"user.message","timestamp":"2026-01-15T15:02:30Z","sessionId":"session-cli-002","data":{"content":"Why is the implicit flow considered less secure? What are the specific attack vectors?","agentMode":false}}
+{"type":"assistant.usage","timestamp":"2026-01-15T15:02:45Z","sessionId":"session-cli-002","data":{"model":"claude-sonnet-4-6","inputTokens":700,"outputTokens":900,"cost":0.008}}
+{"type":"user.message","timestamp":"2026-01-15T15:03:30Z","sessionId":"session-cli-002","data":{"content":"How does PKCE (Proof Key for Code Exchange) address the weaknesses you mentioned?","agentMode":false}}
+{"type":"assistant.usage","timestamp":"2026-01-15T15:03:45Z","sessionId":"session-cli-002","data":{"model":"claude-sonnet-4-6","inputTokens":900,"outputTokens":1100,"cost":0.010}}
+{"type":"user.message","timestamp":"2026-01-15T15:04:30Z","sessionId":"session-cli-002","data":{"content":"Should I always use PKCE even for server-side applications where a client secret is available?","agentMode":false}}
+{"type":"assistant.usage","timestamp":"2026-01-15T15:04:45Z","sessionId":"session-cli-002","data":{"model":"claude-sonnet-4-6","inputTokens":1100,"outputTokens":800,"cost":0.009}}
+{"type":"user.message","timestamp":"2026-01-15T15:05:30Z","sessionId":"session-cli-002","data":{"content":"What are the OAuth2 best practices for storing tokens securely in a single-page application?","agentMode":false}}
+{"type":"assistant.usage","timestamp":"2026-01-15T15:05:45Z","sessionId":"session-cli-002","data":{"model":"claude-sonnet-4-6","inputTokens":1200,"outputTokens":1000,"cost":0.011}}
+{"type":"session.shutdown","timestamp":"2026-01-15T15:06:00Z","sessionId":"session-cli-002","data":{"totalApiDurationMs":330000,"currentModel":"claude-sonnet-4-6"}}
