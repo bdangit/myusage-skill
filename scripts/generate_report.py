@@ -64,6 +64,9 @@ class Session:
     session_character: str = "general"
     inter_message_gaps: List[float] = field(default_factory=list)
     character_approximate: bool = False
+    model_request_counts: Optional[Dict[str, int]] = None
+    effective_prus: Optional[float] = None
+    estimated_cost_usd: Optional[float] = None
 
 
 @dataclass
@@ -87,6 +90,31 @@ class InsightsReport:
     total_messages_all_tools: int
     peak_concurrent_sessions: int
     avg_concurrent_sessions: float
+
+
+# ---------------------------------------------------------------------------
+# Cost tables  (edit these when vendors update pricing)
+# ---------------------------------------------------------------------------
+
+# PRU multipliers per Copilot model — last verified: 2026-03-17
+PRU_MULTIPLIERS: Dict[str, float] = {
+    "gpt-4o":            1.0,
+    "gpt-4o-mini":       1.0,
+    "o3-mini":           1.0,
+    "claude-haiku-4.5":  1.0,
+    "claude-sonnet-4-6": 1.0,
+    "claude-opus-4-6":   3.0,
+    "gemini-2.0-flash":  1.0,
+}
+PRU_DEFAULT_MULTIPLIER: float = 1.0
+PRU_UNIT_PRICE_USD: float = 0.04  # USD per effective PRU at list price
+
+# Token prices in USD per million tokens — last verified: 2026-03-17
+TOKEN_PRICES: Dict[str, Dict[str, float]] = {
+    "claude-haiku-4.5":  {"input": 0.80,  "output": 4.00},
+    "claude-sonnet-4-6": {"input": 3.00,  "output": 15.00},
+    "claude-opus-4-6":   {"input": 15.00, "output": 75.00},
+}
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +347,7 @@ def parse_copilot_vscode(vscode_dir: str) -> List[Session]:
 
         requests = data.get("requests", [])
         messages: List[Message] = []
+        req_model_counts: Dict[str, int] = {}
 
         for req in requests:
             ts_ms = req.get("timestamp")
@@ -341,11 +370,12 @@ def parse_copilot_vscode(vscode_dir: str) -> List[Session]:
             content = " ".join(text_parts)
             messages.append(Message(timestamp=ts, role="user", content=content))
 
-            # No assistant messages accessible; we skip them
-            # model per request
+            # Track per-request model for accurate PRU calculation
             req_model = req.get("modelId")
-            if req_model and not model:
-                model = req_model
+            if req_model:
+                req_model_counts[req_model] = req_model_counts.get(req_model, 0) + 1
+                if not model:
+                    model = req_model
 
         if not messages:
             # Try to synthesize start/end from session-level fields
@@ -400,6 +430,7 @@ def parse_copilot_vscode(vscode_dir: str) -> List[Session]:
             tool_call_count=0,
             inter_message_gaps=gaps,
             character_approximate=True,  # tool_call_count not available
+            model_request_counts=req_model_counts if req_model_counts else None,
         )
         char, approx = classify_session_character(session)
         session.session_character = char
@@ -793,6 +824,8 @@ def build_report(all_sessions: List[Session]) -> InsightsReport:
             date_range_end=date_range_end,
         )
 
+    compute_session_costs(all_sessions)
+
     peak, avg = compute_concurrent_sessions(all_sessions)
 
     local_tz = datetime.now().astimezone().tzinfo
@@ -807,6 +840,49 @@ def build_report(all_sessions: List[Session]) -> InsightsReport:
         peak_concurrent_sessions=peak,
         avg_concurrent_sessions=avg,
     )
+
+
+def compute_session_costs(sessions: List[Session]) -> None:
+    """Mutate sessions in-place to set effective_prus and estimated_cost_usd."""
+    for s in sessions:
+        if s.tool in ("copilot_vscode", "copilot_cli"):
+            # Build per-model interaction counts
+            if s.model_request_counts:
+                counts = s.model_request_counts
+            elif s.model:
+                counts = {s.model: s.message_count}
+            else:
+                counts = {}
+
+            total_prus = 0.0
+            for model, cnt in counts.items():
+                multiplier = PRU_MULTIPLIERS.get(model)
+                if multiplier is None:
+                    print(
+                        f"Warning: no PRU multiplier for model '{model}' in session "
+                        f"'{s.session_id}'; using default {PRU_DEFAULT_MULTIPLIER}x",
+                        file=sys.stderr,
+                    )
+                    multiplier = PRU_DEFAULT_MULTIPLIER
+                total_prus += cnt * multiplier
+
+            s.effective_prus = total_prus
+            s.estimated_cost_usd = total_prus * PRU_UNIT_PRICE_USD
+
+        elif s.tool == "claude_code":
+            if s.input_tokens is not None and s.output_tokens is not None and s.model:
+                prices = TOKEN_PRICES.get(s.model)
+                if prices is None:
+                    print(
+                        f"Warning: no token price for model '{s.model}' in session "
+                        f"'{s.session_id}'; cost unknown",
+                        file=sys.stderr,
+                    )
+                else:
+                    s.estimated_cost_usd = (
+                        s.input_tokens / 1_000_000 * prices["input"]
+                        + s.output_tokens / 1_000_000 * prices["output"]
+                    )
 
 
 def extract_data(report: InsightsReport, all_sessions: List[Session], days_filter: Optional[int] = None) -> str:
@@ -956,6 +1032,17 @@ def extract_data(report: InsightsReport, all_sessions: List[Session], days_filte
     else:
         data_window = "all time"
 
+    # Cost summary per tool
+    cost_by_tool: Dict[str, Dict] = {}
+    for tool_key, snap in report.snapshots.items():
+        cost_sessions = [s.estimated_cost_usd for s in snap.sessions if s.estimated_cost_usd is not None]
+        pru_sessions = [s.effective_prus for s in snap.sessions if s.effective_prus is not None]
+        cost_by_tool[tool_key] = {
+            "total_estimated_usd": round(sum(cost_sessions), 4) if cost_sessions else None,
+            "total_effective_prus": round(sum(pru_sessions), 2) if pru_sessions else None,
+            "has_cost_data": bool(cost_sessions),
+        }
+
     data = {
         "summary": {
             "total_sessions": total_sessions,
@@ -978,6 +1065,7 @@ def extract_data(report: InsightsReport, all_sessions: List[Session], days_filte
         "top_projects": top_projects,
         "models": model_counts,
         "conversations": conversations,
+        "cost_by_tool": cost_by_tool,
     }
     return json.dumps(data, indent=2)
 
@@ -1239,6 +1327,18 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         if snap.total_output_tokens is not None
     )
     has_tokens = total_input > 0 or total_output > 0
+
+    # --- Cost data ---
+    tool_cost: Dict[str, Optional[float]] = {}
+    tool_prus: Dict[str, Optional[float]] = {}
+    for t in tool_names:
+        sess_list = report.snapshots[t].sessions
+        costs = [s.estimated_cost_usd for s in sess_list if s.estimated_cost_usd is not None]
+        prus = [s.effective_prus for s in sess_list if s.effective_prus is not None]
+        tool_cost[t] = round(sum(costs), 4) if costs else None
+        tool_prus[t] = round(sum(prus), 2) if prus else None
+    has_costs = any(v is not None for v in tool_cost.values())
+    has_prus = any(v is not None for v in tool_prus.values())
 
     # --- Date range ---
     if all_sessions:
@@ -1999,6 +2099,8 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             <th>Session %</th>
             <th>Date Range</th>
             {'<th>Input Tokens</th><th>Output Tokens</th>' if has_tokens else ''}
+            {'<th>Est. Cost (USD) ⓘ</th>' if has_costs else ''}
+            {'<th>Effective PRUs</th>' if has_prus else ''}
           </tr>
         </thead>
         <tbody>
@@ -2010,9 +2112,12 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             <td>{round(report.snapshots[t].total_sessions / max(report.total_sessions_all_tools, 1) * 100)}%</td>
             <td style="color:var(--text-muted);font-size:0.8rem">{fmt_date(report.snapshots[t].date_range_start)} → {fmt_date(report.snapshots[t].date_range_end)}</td>
             {'<td>' + (f"{report.snapshots[t].total_input_tokens:,}" if report.snapshots[t].total_input_tokens is not None else "—") + '</td><td>' + (f"{report.snapshots[t].total_output_tokens:,}" if report.snapshots[t].total_output_tokens is not None else "—") + '</td>' if has_tokens else ''}
+            {''.join([f'<td title="Estimated at list price; plan allowances may reduce actual cost">' + (f"${tool_cost[t]:.4f}" if tool_cost[t] is not None else "N/A") + '</td>']) if has_costs else ''}
+            {''.join([f'<td>' + (f"{tool_prus[t]:.1f}" if tool_prus[t] is not None else "N/A") + '</td>']) if has_prus else ''}
           </tr>""" for t in tool_names)}
         </tbody>
       </table>
+      {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.</p>' if has_costs else ''}
     </div>
   </div>
 </section>
