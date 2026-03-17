@@ -2065,6 +2065,10 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
       <div class="value" style="color: var(--pink)">{len(report.snapshots)}</div>
       <div class="label">Tools Used</div>
     </div>
+    {f"""<div class="stat-card" title="Estimated at list price using locally stored price schedules">
+      <div class="value" style="color: var(--green)">${sum(v for v in tool_cost.values() if v is not None):.2f}</div>
+      <div class="label">Est. Total Cost ⓘ</div>
+    </div>""" if has_costs else ""}
   </div>
 
   <div class="insight-callout">
@@ -2126,6 +2130,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         </tbody>
       </table>
       {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.</p>' if has_costs else ''}
+      {token_html}
     </div>
   </div>
 </section>
@@ -2252,7 +2257,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     {model_chart_html if has_model else ""}
   </div>
 
-  {token_html}
+
 </section>
 """}
 
