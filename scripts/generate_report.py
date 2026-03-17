@@ -1282,6 +1282,24 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     def _html_escape(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
+    def _md_inline_to_html(text: str) -> str:
+        """Convert inline markdown to HTML: **bold**, `code`, [link](url). Escapes all other text."""
+        import re as _re
+        pattern = _re.compile(r'\[([^\]]+)\]\(([^)]+)\)|\*\*(.+?)\*\*|`([^`]+)`')
+        result = []
+        last = 0
+        for m in pattern.finditer(text):
+            result.append(_html_escape(text[last:m.start()]))
+            if m.group(1) is not None:  # [text](url)
+                result.append(f'<a href="{_html_escape(m.group(2))}" target="_blank" rel="noopener">{_html_escape(m.group(1))}</a>')
+            elif m.group(3) is not None:  # **bold**
+                result.append(f'<strong>{_html_escape(m.group(3))}</strong>')
+            else:  # `code`
+                result.append(f'<code>{_html_escape(m.group(4))}</code>')
+            last = m.end()
+        result.append(_html_escape(text[last:]))
+        return "".join(result)
+
     if ins_headline or ins_sections or ins_at_a_glance:
         # Headline
         headline_html = ""
@@ -1321,7 +1339,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             extra_class = " insight-card-autonomous" if "Autonomous" in sec.get("title", "") else ""
             if "bullets" in sec and isinstance(sec["bullets"], list):
                 items_html = "".join(
-                    f"<li>{_html_escape(b)}</li>" for b in sec["bullets"]
+                    f"<li>{_md_inline_to_html(b)}</li>" for b in sec["bullets"]
                 )
                 body_html = f'<ul class="insight-bullets">{items_html}</ul>'
             else:
@@ -1574,6 +1592,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     box-shadow: var(--shadow);
   }}
   .insight-card-autonomous {{
+    grid-column: 1 / -1;
     border-color: rgba(139, 92, 246, 0.4);
     background: rgba(139, 92, 246, 0.05);
   }}
