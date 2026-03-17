@@ -1,5 +1,7 @@
 # myusage-skill
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 A Claude Code / Copilot skill that reads your local AI tool chat history and generates a
 polished, self-contained HTML insights report.
 
@@ -22,9 +24,17 @@ polished, self-contained HTML insights report.
 | Copilot VS Code | `~/Library/Application Support/Code/User/workspaceStorage/` |
 | Copilot CLI | `~/.copilot/session-state/` |
 
+## Installation
+
+```sh
+/plugin marketplace add bdangit/myusage-skill
+```
+
 ## Usage
 
-Say to your agent: *"Generate my AI usage report"* or *"Show me my AI usage insights"*
+Once installed, say to your agent: *"Generate my AI usage report"* or *"Show me my AI usage insights"*
+
+The skill is also invocable directly as `/myusage`.
 
 The report is written to `~/Desktop/myusage-report.html`.
 
