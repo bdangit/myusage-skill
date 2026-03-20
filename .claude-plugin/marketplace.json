@@ -9,7 +9,7 @@
       "name": "myusage",
       "source": "./",
       "description": "Generate a personal AI usage insights report from local Claude Code and Copilot chat history.",
-      "skills": "["./"],
+      "skills": ["./"],
       "version": "1.0.1",
       "author": {
         "name": "bdangit"
