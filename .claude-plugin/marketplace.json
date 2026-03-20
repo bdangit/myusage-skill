@@ -7,7 +7,11 @@
   "plugins": [
     {
       "name": "myusage",
-      "source": ".",
+      "source": {
+        "type": "github",
+        "repo": "bdangit/myusage-skill",
+        "ref": "main"
+      },
       "description": "Generate a personal AI usage insights report from local Claude Code and Copilot chat history.",
       "version": "1.0.0",
       "author": {
