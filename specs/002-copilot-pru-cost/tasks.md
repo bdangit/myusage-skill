@@ -114,11 +114,11 @@ cost and effective PRU counts per tool, with "estimated" labels and "N/A" for ab
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T018 Run the full eval suite `python -m unittest discover -s evals -p "test_*.py"` and confirm zero failures; fix any regressions in existing evals introduced by the `Session` dataclass changes
+- [x] T018 Run the full eval suite `python -m unittest discover -s evals -p "test_*.py"` and confirm zero failures; fix any regressions in existing evals introduced by the `Session` dataclass changes
 
-- [ ] T019 Audit the HTML added in T015 for hardcoded vendor names: grep the new template strings in `render_html()` for "Claude", "Copilot", "GitHub", "GPT", "Anthropic" — none should appear as static text; all tool labels must come from `session.tool` or snapshot keys
+- [x] T019 Audit the HTML added in T015 for hardcoded vendor names: grep the new template strings in `render_html()` for "Claude", "Copilot", "GitHub", "GPT", "Anthropic" — none should appear as static text; all tool labels must come from `session.tool` or snapshot keys
 
-- [ ] T020 Run `.specify/scripts/bash/update-agent-context.sh claude` from repo root to update agent context file with the new `PRU_MULTIPLIERS`, `TOKEN_PRICES`, and `compute_session_costs` additions
+- [x] T020 Run `.specify/scripts/bash/update-agent-context.sh claude` from repo root to update agent context file with the new `PRU_MULTIPLIERS`, `TOKEN_PRICES`, and `compute_session_costs` additions
 
 ---
 
