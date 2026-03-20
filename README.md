@@ -5,6 +5,12 @@
 A Claude Code / Copilot skill that reads your local AI tool chat history and generates a
 polished, self-contained HTML insights report.
 
+## Preview
+
+![myusage report](docs/myusage-hero.png)
+
+![myusage report walkthrough](docs/myusage-preview.gif)
+
 ## What it shows you
 
 - **Tool usage split** — how your sessions and messages are distributed across Claude Code,
@@ -26,9 +32,19 @@ polished, self-contained HTML insights report.
 
 ## Installation
 
+**Step 1** — add the marketplace source (one-time):
+
 ```sh
 /plugin marketplace add bdangit/myusage-skill
 ```
+
+**Step 2** — install the skill:
+
+```sh
+/plugin install myusage@myusage-skill
+```
+
+Works with Claude Code and Copilot CLI.
 
 ## Usage
 
@@ -40,13 +56,6 @@ The report is written to `~/Desktop/myusage-report.html`.
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - Internet connection at generation time (Chart.js is fetched once and embedded in the output)
 - macOS (v1 — data source paths are macOS-specific)
-
-## Status
-
-Spec and implementation plan complete. See `specs/001-usage-insights-report/` for full design
-documentation.
-
-Upcoming work tracked in [`TODO.md`](./TODO.md).
