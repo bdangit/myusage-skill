@@ -64,6 +64,10 @@ class Session:
     session_character: str = "general"
     inter_message_gaps: List[float] = field(default_factory=list)
     character_approximate: bool = False
+    model_request_counts: Optional[Dict[str, int]] = None
+    model_token_totals: Optional[Dict[str, Dict[str, int]]] = None
+    effective_prus: Optional[float] = None
+    estimated_cost_usd: Optional[float] = None
 
 
 @dataclass
@@ -87,6 +91,39 @@ class InsightsReport:
     total_messages_all_tools: int
     peak_concurrent_sessions: int
     avg_concurrent_sessions: float
+
+
+# ---------------------------------------------------------------------------
+# Cost tables  (edit these when vendors update pricing)
+# ---------------------------------------------------------------------------
+
+# PRU multipliers per Copilot model — last verified: 2026-03-17
+# Copilot surfaces model IDs in two forms: plain ("claude-haiku-4.5") and
+# namespaced ("copilot/claude-haiku-4.5"). Both are listed here.
+PRU_MULTIPLIERS: Dict[str, float] = {
+    "gpt-4o":                       1.0,
+    "gpt-4o-mini":                  1.0,
+    "gpt-5":                        1.0,
+    "gpt-5-mini":                   1.0,
+    "o3-mini":                      1.0,
+    "claude-haiku-4.5":             1.0,
+    "copilot/claude-haiku-4.5":     1.0,
+    "claude-sonnet-4-6":            1.0,
+    "copilot/claude-sonnet-4-6":    1.0,
+    "claude-opus-4-6":              3.0,
+    "copilot/claude-opus-4-6":      3.0,
+    "gemini-2.0-flash":             1.0,
+    "copilot/gemini-2.0-flash":     1.0,
+}
+PRU_DEFAULT_MULTIPLIER: float = 1.0
+PRU_UNIT_PRICE_USD: float = 0.04  # USD per effective PRU at list price
+
+# Token prices in USD per million tokens — last verified: 2026-03-17
+TOKEN_PRICES: Dict[str, Dict[str, float]] = {
+    "claude-haiku-4.5":  {"input": 0.80,  "output": 4.00},
+    "claude-sonnet-4-6": {"input": 3.00,  "output": 15.00},
+    "claude-opus-4-6":   {"input": 15.00, "output": 75.00},
+}
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +205,7 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
         model: Optional[str] = None
         input_tokens_total = 0
         output_tokens_total = 0
+        model_token_totals: Dict[str, Dict[str, int]] = {}
         has_token_data = False
         project_path: Optional[str] = None
         permission_mode: Optional[str] = None  # first permissionMode seen on user entries
@@ -209,8 +247,9 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
             elif entry_type == "assistant":
                 msg_obj = entry.get("message", {})
                 # Model
+                entry_model = msg_obj.get("model")
                 if not model:
-                    model = msg_obj.get("model")
+                    model = entry_model
                 # Tokens
                 usage = msg_obj.get("usage", {})
                 in_tok = usage.get("input_tokens")
@@ -220,6 +259,14 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
                     has_token_data = True
                 if out_tok is not None:
                     output_tokens_total += int(out_tok)
+                if entry_model and (in_tok is not None or out_tok is not None):
+                    model_totals = model_token_totals.setdefault(
+                        entry_model, {"input_tokens": 0, "output_tokens": 0}
+                    )
+                    if in_tok is not None:
+                        model_totals["input_tokens"] += int(in_tok)
+                    if out_tok is not None:
+                        model_totals["output_tokens"] += int(out_tok)
 
                 # Tool use blocks
                 content_list = msg_obj.get("content", [])
@@ -267,6 +314,7 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
             tool_call_count=tool_call_count,
             inter_message_gaps=gaps,
             character_approximate=False,
+            model_token_totals=model_token_totals if model_token_totals else None,
         )
         char, approx = classify_session_character(session)
         session.session_character = char
@@ -319,6 +367,7 @@ def parse_copilot_vscode(vscode_dir: str) -> List[Session]:
 
         requests = data.get("requests", [])
         messages: List[Message] = []
+        req_model_counts: Dict[str, int] = {}
 
         for req in requests:
             ts_ms = req.get("timestamp")
@@ -341,11 +390,12 @@ def parse_copilot_vscode(vscode_dir: str) -> List[Session]:
             content = " ".join(text_parts)
             messages.append(Message(timestamp=ts, role="user", content=content))
 
-            # No assistant messages accessible; we skip them
-            # model per request
+            # Track per-request model for accurate PRU calculation
             req_model = req.get("modelId")
-            if req_model and not model:
-                model = req_model
+            if req_model:
+                req_model_counts[req_model] = req_model_counts.get(req_model, 0) + 1
+                if not model:
+                    model = req_model
 
         if not messages:
             # Try to synthesize start/end from session-level fields
@@ -400,6 +450,7 @@ def parse_copilot_vscode(vscode_dir: str) -> List[Session]:
             tool_call_count=0,
             inter_message_gaps=gaps,
             character_approximate=True,  # tool_call_count not available
+            model_request_counts=req_model_counts if req_model_counts else None,
         )
         char, approx = classify_session_character(session)
         session.session_character = char
@@ -458,6 +509,7 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
         has_token_data = False
         tool_call_count = 0
         messages: List[Message] = []
+        model_request_counts: Dict[str, int] = {}
 
         for ev in events:
             ev_type = ev.get("type", "")
@@ -507,7 +559,9 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
             elif ev_type == "assistant.usage":
                 ev_model = data.get("model") or ev.get("model")
                 if ev_model:
-                    model = ev_model
+                    if not model:
+                        model = ev_model
+                    model_request_counts[ev_model] = model_request_counts.get(ev_model, 0) + 1
                 in_tok = data.get("inputTokens") or ev.get("inputTokens")
                 out_tok = data.get("outputTokens") or ev.get("outputTokens")
                 if in_tok is not None:
@@ -563,6 +617,7 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
             tool_call_count=tool_call_count,
             inter_message_gaps=gaps,
             character_approximate=False,
+            model_request_counts=model_request_counts if model_request_counts else None,
         )
         char, approx = classify_session_character(session)
         session.session_character = char
@@ -793,6 +848,8 @@ def build_report(all_sessions: List[Session]) -> InsightsReport:
             date_range_end=date_range_end,
         )
 
+    compute_session_costs(all_sessions)
+
     peak, avg = compute_concurrent_sessions(all_sessions)
 
     local_tz = datetime.now().astimezone().tzinfo
@@ -807,6 +864,79 @@ def build_report(all_sessions: List[Session]) -> InsightsReport:
         peak_concurrent_sessions=peak,
         avg_concurrent_sessions=avg,
     )
+
+
+def compute_session_costs(sessions: List[Session]) -> None:
+    """Mutate sessions in-place to set effective_prus and estimated_cost_usd."""
+    for s in sessions:
+        s.effective_prus = None
+        s.estimated_cost_usd = None
+
+        if s.tool in ("copilot_vscode", "copilot_cli"):
+            # Build per-model interaction counts
+            if s.model_request_counts:
+                counts = s.model_request_counts
+            elif s.model:
+                counts = {s.model: s.message_count}
+            else:
+                counts = {}
+
+            if not counts:
+                print(
+                    f"Warning: no model data for session '{s.session_id}'; cost unknown",
+                    file=sys.stderr,
+                )
+                continue
+
+            total_prus = 0.0
+            for model, cnt in counts.items():
+                multiplier = PRU_MULTIPLIERS.get(model)
+                if multiplier is None:
+                    print(
+                        f"Warning: no PRU multiplier for model '{model}' in session "
+                        f"'{s.session_id}'; using default {PRU_DEFAULT_MULTIPLIER}x",
+                        file=sys.stderr,
+                    )
+                    multiplier = PRU_DEFAULT_MULTIPLIER
+                total_prus += cnt * multiplier
+
+            s.effective_prus = total_prus
+            s.estimated_cost_usd = total_prus * PRU_UNIT_PRICE_USD
+
+        elif s.tool == "claude_code":
+            if s.model_token_totals:
+                total_cost = 0.0
+                unknown_models: List[str] = []
+                for model_name, totals in s.model_token_totals.items():
+                    prices = TOKEN_PRICES.get(model_name)
+                    if prices is None:
+                        unknown_models.append(model_name)
+                        continue
+                    total_cost += (
+                        totals.get("input_tokens", 0) / 1_000_000 * prices["input"]
+                        + totals.get("output_tokens", 0) / 1_000_000 * prices["output"]
+                    )
+                if unknown_models:
+                    print(
+                        f"Warning: no token price for model(s) {', '.join(repr(m) for m in unknown_models)} "
+                        f"in session '{s.session_id}'; cost unknown",
+                        file=sys.stderr,
+                    )
+                    continue
+                s.estimated_cost_usd = total_cost
+            elif s.input_tokens is not None and s.output_tokens is not None and s.model:
+                prices = TOKEN_PRICES.get(s.model)
+                if prices is None:
+                    print(
+                        f"Warning: no token price for model '{s.model}' in session "
+                        f"'{s.session_id}'; cost unknown",
+                        file=sys.stderr,
+                    )
+                else:
+                    s.estimated_cost_usd = (
+                        s.input_tokens / 1_000_000 * prices["input"]
+                        + s.output_tokens / 1_000_000 * prices["output"]
+                    )
 
 
 def extract_data(report: InsightsReport, all_sessions: List[Session], days_filter: Optional[int] = None) -> str:
@@ -956,6 +1086,17 @@ def extract_data(report: InsightsReport, all_sessions: List[Session], days_filte
     else:
         data_window = "all time"
 
+    # Cost summary per tool
+    cost_by_tool: Dict[str, Dict] = {}
+    for tool_key, snap in report.snapshots.items():
+        cost_sessions = [s.estimated_cost_usd for s in snap.sessions if s.estimated_cost_usd is not None]
+        pru_sessions = [s.effective_prus for s in snap.sessions if s.effective_prus is not None]
+        cost_by_tool[tool_key] = {
+            "total_estimated_usd": round(sum(cost_sessions), 4) if cost_sessions else None,
+            "total_effective_prus": round(sum(pru_sessions), 2) if pru_sessions else None,
+            "has_cost_data": bool(cost_sessions),
+        }
+
     data = {
         "summary": {
             "total_sessions": total_sessions,
@@ -978,6 +1119,7 @@ def extract_data(report: InsightsReport, all_sessions: List[Session], days_filte
         "top_projects": top_projects,
         "models": model_counts,
         "conversations": conversations,
+        "cost_by_tool": cost_by_tool,
     }
     return json.dumps(data, indent=2)
 
@@ -1240,6 +1382,18 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     )
     has_tokens = total_input > 0 or total_output > 0
 
+    # --- Cost data ---
+    tool_cost: Dict[str, Optional[float]] = {}
+    tool_prus: Dict[str, Optional[float]] = {}
+    for t in tool_names:
+        sess_list = report.snapshots[t].sessions
+        costs = [s.estimated_cost_usd for s in sess_list if s.estimated_cost_usd is not None]
+        prus = [s.effective_prus for s in sess_list if s.effective_prus is not None]
+        tool_cost[t] = round(sum(costs), 4) if costs else None
+        tool_prus[t] = round(sum(prus), 2) if prus else None
+    has_costs = any(v is not None for v in tool_cost.values())
+    has_prus = any(v is not None for v in tool_prus.values())
+
     # --- Date range ---
     if all_sessions:
         all_start = min(s.start_time for s in all_sessions)
@@ -1386,11 +1540,16 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         {variant_footnote}
       </div>"""
 
-    # Token summary
+    # Token + PRU summary
     token_html = ""
-    if has_tokens:
-        token_html = f"""
-      <div class="stat-row">
+    if has_tokens or has_prus:
+        total_prus_all = sum(v for v in tool_prus.values() if v is not None)
+        pru_stat = f"""
+        <div class="stat-item">
+          <div class="stat-value">{total_prus_all:.1f}</div>
+          <div class="stat-label">Total PRUs</div>
+        </div>""" if has_prus else ""
+        token_stats = f"""
         <div class="stat-item">
           <div class="stat-value">{total_input:,}</div>
           <div class="stat-label">Input Tokens</div>
@@ -1402,7 +1561,9 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         <div class="stat-item">
           <div class="stat-value">{(total_input + total_output):,}</div>
           <div class="stat-label">Total Tokens</div>
-        </div>
+        </div>""" if has_tokens else ""
+        token_html = f"""
+      <div class="stat-row">{token_stats}{pru_stat}
       </div>"""
 
     gen_ts_local = fmt_dt(report.generated_at)
@@ -1957,6 +2118,10 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
       <div class="value" style="color: var(--pink)">{len(report.snapshots)}</div>
       <div class="label">Tools Used</div>
     </div>
+    {f"""<div class="stat-card" title="Estimated at list price using locally stored price schedules">
+      <div class="value" style="color: var(--green)">${sum(v for v in tool_cost.values() if v is not None):.2f}</div>
+      <div class="label">Est. Total Cost ⓘ</div>
+    </div>""" if has_costs else ""}
   </div>
 
   <div class="insight-callout">
@@ -1999,6 +2164,8 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             <th>Session %</th>
             <th>Date Range</th>
             {'<th>Input Tokens</th><th>Output Tokens</th>' if has_tokens else ''}
+            {'<th>Effective PRUs</th>' if has_prus else ''}
+            {'<th title="Claude Code: (input tokens ÷ 1M × $/M) + (output tokens ÷ 1M × $/M). Copilot: requests × PRU multiplier × $0.04/PRU. Estimated at list price; plan allowances may differ.">Est. Cost (USD) ⓘ</th>' if has_costs else ''}
           </tr>
         </thead>
         <tbody>
@@ -2010,9 +2177,13 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             <td>{round(report.snapshots[t].total_sessions / max(report.total_sessions_all_tools, 1) * 100)}%</td>
             <td style="color:var(--text-muted);font-size:0.8rem">{fmt_date(report.snapshots[t].date_range_start)} → {fmt_date(report.snapshots[t].date_range_end)}</td>
             {'<td>' + (f"{report.snapshots[t].total_input_tokens:,}" if report.snapshots[t].total_input_tokens is not None else "—") + '</td><td>' + (f"{report.snapshots[t].total_output_tokens:,}" if report.snapshots[t].total_output_tokens is not None else "—") + '</td>' if has_tokens else ''}
+            {''.join([f'<td>' + (f"{tool_prus[t]:.1f}" if tool_prus[t] is not None else "N/A") + '</td>']) if has_prus else ''}
+            {''.join([f'<td title="Estimated at list price; plan allowances may reduce actual cost">' + (f"${tool_cost[t]:.4f}" if tool_cost[t] is not None else "N/A") + '</td>']) if has_costs else ''}
           </tr>""" for t in tool_names)}
         </tbody>
       </table>
+      {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.<br><strong>Claude Code:</strong> (input tokens ÷ 1M × input $/M) + (output tokens ÷ 1M × output $/M) — e.g. Sonnet 4.6 at $3.00/M in · $15.00/M out, Haiku 4.5 at $0.80/M in · $4.00/M out, Opus 4.6 at $15.00/M in · $75.00/M out.<br><strong>Copilot:</strong> requests × per-model PRU multiplier = effective PRUs × $0.04/PRU — e.g. gpt-4o and most Claude models at 1.0×, Opus at 3.0×.</p>' if has_costs else ''}
+      {token_html}
     </div>
   </div>
 </section>
@@ -2139,7 +2310,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     {model_chart_html if has_model else ""}
   </div>
 
-  {token_html}
+
 </section>
 """}
 
