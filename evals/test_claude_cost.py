@@ -8,9 +8,10 @@ parse_claude_code, runs build_report, then validates cost estimates per session.
 import os
 import sys
 import unittest
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-from generate_report import parse_claude_code, build_report, TOKEN_PRICES  # noqa: E402
+from generate_report import parse_claude_code, build_report, Session, TOKEN_PRICES  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -209,6 +210,64 @@ class TestClaudeCodeCostEstimation(unittest.TestCase):
         self.assertEqual(s.model, "claude-sonnet-4-6")
         expected = 4700 / 1_000_000 * 3.00 + 5000 / 1_000_000 * 15.00
         self.assertAlmostEqual(s.estimated_cost_usd, expected, places=9)
+
+    def test_mixed_model_session_prices_each_model_separately(self):
+        """Mixed-model Claude sessions should sum cost per model, not price all tokens at one rate."""
+        now = datetime(2026, 1, 15, tzinfo=timezone.utc)
+        session = Session(
+            session_id="mixed-claude",
+            tool="claude_code",
+            project_path=None,
+            start_time=now,
+            end_time=now,
+            duration_seconds=0.0,
+            messages=[],
+            message_count=2,
+            model="claude-sonnet-4-6",
+            mode="default",
+            input_tokens=3000,
+            output_tokens=2000,
+            model_token_totals={
+                "claude-sonnet-4-6": {"input_tokens": 1000, "output_tokens": 1000},
+                "claude-opus-4-6": {"input_tokens": 2000, "output_tokens": 1000},
+            },
+        )
+
+        build_report([session])
+
+        expected = (
+            1000 / 1_000_000 * TOKEN_PRICES["claude-sonnet-4-6"]["input"]
+            + 1000 / 1_000_000 * TOKEN_PRICES["claude-sonnet-4-6"]["output"]
+            + 2000 / 1_000_000 * TOKEN_PRICES["claude-opus-4-6"]["input"]
+            + 1000 / 1_000_000 * TOKEN_PRICES["claude-opus-4-6"]["output"]
+        )
+        self.assertAlmostEqual(session.estimated_cost_usd, expected, places=9)
+
+    def test_unknown_model_in_claude_session_keeps_cost_unknown(self):
+        """Claude sessions with any unpriced model should keep estimated_cost_usd as None."""
+        now = datetime(2026, 1, 15, tzinfo=timezone.utc)
+        session = Session(
+            session_id="unknown-claude",
+            tool="claude_code",
+            project_path=None,
+            start_time=now,
+            end_time=now,
+            duration_seconds=0.0,
+            messages=[],
+            message_count=1,
+            model="claude-mystery-9",
+            mode="default",
+            input_tokens=1000,
+            output_tokens=1000,
+            model_token_totals={
+                "claude-sonnet-4-6": {"input_tokens": 500, "output_tokens": 500},
+                "claude-mystery-9": {"input_tokens": 500, "output_tokens": 500},
+            },
+        )
+
+        build_report([session])
+
+        self.assertIsNone(session.estimated_cost_usd)
 
 
 if __name__ == "__main__":

@@ -8,9 +8,10 @@ computes effective PRUs, estimated cost, and token data for each.
 import os
 import sys
 import unittest
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
-from generate_report import parse_copilot_cli, build_report
+from generate_report import parse_copilot_cli, build_report, Session, PRU_UNIT_PRICE_USD
 
 FIXTURES = os.path.join(os.path.dirname(__file__), 'fixtures')
 CLI_DIR = os.path.join(FIXTURES, 'copilot_cli')
@@ -115,6 +116,37 @@ class TestPRUCLI(unittest.TestCase):
             session.message_count,
             6,
             f"Expected message_count 6, got {session.message_count}",
+        )
+
+    def test_mixed_model_request_counts_drive_pru_total(self):
+        """CLI PRUs should sum per-model request counts rather than using one session-level model."""
+        now = datetime(2026, 1, 15, tzinfo=timezone.utc)
+        session = Session(
+            session_id="mixed-cli",
+            tool="copilot_cli",
+            project_path=None,
+            start_time=now,
+            end_time=now,
+            duration_seconds=0.0,
+            messages=[],
+            message_count=3,
+            model="claude-opus-4-6",
+            mode="agent",
+            input_tokens=None,
+            output_tokens=None,
+            model_request_counts={
+                "claude-sonnet-4-6": 2,
+                "claude-opus-4-6": 1,
+            },
+        )
+
+        build_report([session])
+
+        self.assertAlmostEqual(session.effective_prus, 5.0, places=6)
+        self.assertAlmostEqual(
+            session.estimated_cost_usd,
+            5.0 * PRU_UNIT_PRICE_USD,
+            places=9,
         )
 
 
