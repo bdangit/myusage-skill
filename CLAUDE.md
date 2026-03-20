@@ -17,10 +17,10 @@ The six non-negotiable principles are: **Evals-First**, **Agent CLI Agnostic**,
 **LLM-Agnostic Insights**. Read the constitution before making any design decisions.
 
 ## Active Technologies
-- Python 3.8+ (stdlib only — per constitution Principle III) + None (stdlib only). Chart.js inlined at report generation time (approved exception). (002-copilot-pru-cost-impl)
+- Python 3.10+ (stdlib only — per constitution Principle III) + None (stdlib only). Chart.js inlined at report generation time (approved exception). (002-copilot-pru-cost-impl)
 - Local filesystem — reads existing Copilot/Claude Code session files already parsed by feature 001. (002-copilot-pru-cost-impl)
 
-- **Language**: Python 3.8+ (stdlib only — no pip installs)
+- **Language**: Python 3.10+ (stdlib only — no pip installs)
 - **Frontend**: Chart.js 4.x (fetched from CDN at report generation time, inlined into output HTML)
 
 ## Project Structure
@@ -52,7 +52,7 @@ python -m unittest discover -s evals -p "test_*.py"
 
 ## Code Style
 
-- Python 3.8+ standard conventions
+- Python 3.10+ standard conventions
 - No external linting tools required (stdlib only project)
 
 ## Feature Branches
@@ -64,4 +64,4 @@ python -m unittest discover -s evals -p "test_*.py"
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
-- 002-copilot-pru-cost-impl: Added Python 3.8+ (stdlib only — per constitution Principle III) + None (stdlib only). Chart.js inlined at report generation time (approved exception).
+- 002-copilot-pru-cost-impl: Added Python 3.10+ (stdlib only — per constitution Principle III) + None (stdlib only). Chart.js inlined at report generation time (approved exception).

@@ -2,11 +2,13 @@
 
 ## Skill Marketplace / Registry
 
-- [ ] Research agentskills.io spec and determine if `marketplace.json` or their manifest format
-      is the right approach for publishing this skill to a registry.
-- [ ] Decide whether to support multiple registries (agentskills.io, Claude skill marketplace,
-      Copilot extensions marketplace) or target one first.
-- [ ] Add the manifest file once format is decided and spec is validated.
+- [x] Add `.claude-plugin/marketplace.json` catalog (read by `/plugin marketplace add bdangit/myusage-skill`)
+      and `.claude-plugin/plugin.json` manifest (read by `/plugin install myusage@myusage-skill`) —
+      works with Claude Code and Copilot CLI `/plugin` commands.
+- [ ] Research agentskills.io spec and determine if their manifest format requires changes to
+      `plugin.json` for broader registry publishing.
+- [ ] Decide whether to target additional registries (agentskills.io, Copilot extensions
+      marketplace) beyond Claude Code / Copilot CLI.
 
 ## CI Pipeline
 

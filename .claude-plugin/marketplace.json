@@ -1,0 +1,21 @@
+{
+  "name": "myusage-skill",
+  "description": "Personal AI usage insights — generate a self-contained HTML report from local Claude Code and Copilot chat history.",
+  "owner": {
+    "name": "bdangit"
+  },
+  "plugins": [
+    {
+      "name": "myusage",
+      "source": ".",
+      "description": "Generate a personal AI usage insights report from local Claude Code and Copilot chat history.",
+      "version": "1.0.0",
+      "author": {
+        "name": "bdangit"
+      },
+      "repository": "https://github.com/bdangit/myusage-skill",
+      "license": "MIT",
+      "tags": ["ai", "usage", "insights", "report", "claude", "copilot"]
+    }
+  ]
+}
