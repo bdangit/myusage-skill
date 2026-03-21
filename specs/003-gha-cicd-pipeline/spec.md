@@ -73,13 +73,14 @@ A developer wants to run the same checks locally that CI will run, before openin
 - **FR-004**: The validate job MUST verify that `SKILL.md` contains a valid frontmatter block with both `name` and `description` fields present.
 - **FR-005**: The validate job MUST run all eval tests and fail if any test fails.
 - **FR-006**: The release job MUST only execute after the validate job passes; it MUST NOT run on pull request events.
-- **FR-007**: The release job MUST determine the version bump level from commit messages since the last tag using conventional commits: `fix:` → patch, `feat:` → minor, `BREAKING CHANGE:` in commit body → major. If no conventional commit prefix is found, default to patch.
+- **FR-007**: The release job MUST determine the version bump level from commit messages since the last tag: any commit with `!` in the type/scope (e.g., `feat!:`, `fix!:`) OR `BREAKING CHANGE:` in the body triggers a **major** bump; `feat:` triggers **minor**; `fix:` triggers **patch**; no match defaults to **patch**. Always increment forward — no rollbacks or re-releases of prior versions.
 - **FR-008**: The release job MUST commit the updated `plugin.json` with a message containing `[skip ci]` to prevent pipeline loops.
 - **FR-009**: The release job MUST create and push a git tag matching the new version (e.g., `v1.0.2`).
 - **FR-010**: The release job MUST create a GitHub Release for the new tag with auto-generated release notes.
 - **FR-011**: All validation steps MUST be executable locally via a single command: `.github/scripts/validate.sh`.
 - **FR-012**: The `version` field MUST be removed from `.claude-plugin/marketplace.json`; `.claude-plugin/plugin.json` is the sole version source.
 - **FR-013**: Version bump level MUST be determined automatically from conventional commit messages — no manual edits to `plugin.json` are required for any bump level.
+- **FR-014**: The release job MUST validate that `.claude-plugin/plugin.json` is valid JSON with a strict `MAJOR.MINOR.PATCH` semver version field before bumping. It MUST also validate that `.claude-plugin/marketplace.json` is valid JSON. Either failure MUST abort the release with a clear error.
 
 ### Key Entities
 
@@ -106,11 +107,15 @@ A developer wants to run the same checks locally that CI will run, before openin
 - **EVAL-003 (US1)**: Given a clean branch where all checks pass, when `.github/scripts/validate.sh` is run, then exit code is 0 and all check steps report success.
 - **EVAL-004 (US2)**: Given `plugin.json` at version `X.Y.Z`, the release script MUST produce: `X.Y.(Z+1)` for a `fix:` commit, `X.(Y+1).0` for a `feat:` commit, and `(X+1).0.0` for a `BREAKING CHANGE:` commit — in all cases the result is valid semver.
 - **EVAL-005 (US3)**: Given a developer runs `.github/scripts/validate.sh` locally on a clean checkout, when it completes, then exit code is 0 and output matches what CI would produce.
+- **EVAL-006 (US2)**: Given `plugin.json` has a malformed version (e.g., `"1.0"` or `"v1.0.1"`), when the release job runs, then it aborts before tagging and outputs a clear semver validation error.
+- **EVAL-007 (US2)**: Given `marketplace.json` is invalid JSON, when the release job runs, then it aborts before tagging and outputs a clear parse error.
 
 ## Assumptions
 
-- The project runs on `ubuntu-latest` GHA runners; no macOS-specific CI behavior is needed.
-- Python 3.10 is available on GHA runners (standard on `ubuntu-latest`).
+- The project uses pinned GHA runners (`ubuntu-24.04`) for reproducible, secure releases — not `ubuntu-latest` which can change over time.
+- Python 3.10 is explicitly selected in CI via `actions/setup-python` and is the version used for local `.github/scripts/validate.sh` runs.
+- Branch protection on `main` requiring the validate status check to pass will be configured once the workflow file exists — SC-002 depends on this.
 - The GHA bot has `contents: write` permission for pushing the version bump commit and creating releases.
 - `softprops/action-gh-release` is used for GitHub Release creation (widely adopted, stable).
 - `.github/scripts/validate.sh` does not need to replicate the git operations from the release job — only the validation steps.
+- Releases always move forward — no rollbacks, re-releases, or re-tagging of prior versions.
