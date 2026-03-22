@@ -20,7 +20,7 @@ if ! awk 'NF { print; exit }' "$SKILL_MD" | grep -qE '^---[[:space:]]*$'; then
   echo "ERROR: $SKILL_MD frontmatter must start with --- as first non-empty line" >&2
   exit 1
 fi
-if ! awk '/^---[[:space:]]*$/{found++} found==1 && /^[[:space:]]*name:[[:space:]]/{name=1} found==1 && /^[[:space:]]*description:[[:space:]]/{desc=1} found==2{exit} END{exit !(name && desc)}' "$SKILL_MD"; then
+if ! awk '/^---[[:space:]]*$/{found++} found==1 && /^[[:space:]]*name:[[:space:]]/{name=1} found==1 && /^[[:space:]]*description:[[:space:]]/{desc=1} found==2{exit} END{exit !(found>1 && name && desc)}' "$SKILL_MD"; then
   echo "ERROR: $SKILL_MD frontmatter missing required 'name:' or 'description:' field" >&2
   exit 1
 fi
@@ -40,4 +40,11 @@ fi
 
 ran=$(echo "$output" | grep "^Ran " | head -1)
 n=$(echo "$ran" | grep -oE '[0-9]+' | head -1)
-echo "[OK] Evals (${n:-?} tests passed)"
+
+if [ -z "$n" ] || [ "$n" -eq 0 ]; then
+  echo "$output"
+  echo "ERROR: Evals ran 0 tests or could not determine test count" >&2
+  exit 1
+fi
+
+echo "[OK] Evals (${n} tests passed)"
