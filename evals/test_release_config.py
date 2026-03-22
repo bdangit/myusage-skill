@@ -8,7 +8,6 @@ EVAL-004: release-please-config.json and .release-please-manifest.json are valid
 
 import json
 import os
-import re
 import unittest
 
 

@@ -6,8 +6,9 @@ EVAL-002: SKILL.md missing name: field → non-zero exit, output identifies miss
 EVAL-003: Clean repo → exit 0, three [OK] lines
 EVAL-005: Local run from repo root → exit 0, all three [OK] lines present
 
-Note: EVAL-003 and EVAL-005 are skipped when running inside validate.sh (VALIDATE_SH_RUNNING=1)
-to prevent infinite recursion: validate.sh → evals → test_ci_validate.py → validate.sh.
+Note: All tests that invoke validate.sh are skipped when running inside validate.sh
+(VALIDATE_SH_RUNNING=1) to prevent infinite recursion:
+validate.sh → evals → test_ci_validate.py → validate.sh → ...
 """
 
 import os
@@ -27,7 +28,9 @@ RUNNING_IN_VALIDATE = os.environ.get("VALIDATE_SH_RUNNING") == "1"
 def run_validate(env=None, cwd=None):
     """Run validate.sh and return (returncode, combined_output).
 
-    Always clears VALIDATE_SH_RUNNING so the child validate.sh starts fresh.
+    Always clears VALIDATE_SH_RUNNING so the child validate.sh starts fresh,
+    ensuring tests that expect failure (EVAL-001/002) are not short-circuited
+    by the recursion guard.
     """
     merged_env = os.environ.copy()
     merged_env.pop("VALIDATE_SH_RUNNING", None)
@@ -44,6 +47,7 @@ def run_validate(env=None, cwd=None):
     return result.returncode, combined
 
 
+@unittest.skipIf(RUNNING_IN_VALIDATE, "Skipped inside validate.sh to prevent infinite recursion")
 class TestCIValidate(unittest.TestCase):
 
     def test_eval_001_syntax_error_fails(self):
@@ -83,7 +87,6 @@ class TestCIValidate(unittest.TestCase):
             f"Expected output to identify missing field, got: {output!r}",
         )
 
-    @unittest.skipIf(RUNNING_IN_VALIDATE, "Skipped inside validate.sh to prevent infinite recursion")
     def test_eval_003_clean_repo_passes(self):
         """EVAL-003: Clean repo → exit 0, output contains three [OK] lines."""
         returncode, output = run_validate()
@@ -92,7 +95,6 @@ class TestCIValidate(unittest.TestCase):
         ok_lines = [line for line in output.splitlines() if line.startswith("[OK]")]
         self.assertEqual(len(ok_lines), 3, f"Expected 3 [OK] lines, got {len(ok_lines)}: {ok_lines}")
 
-    @unittest.skipIf(RUNNING_IN_VALIDATE, "Skipped inside validate.sh to prevent infinite recursion")
     def test_eval_005_local_run_from_repo_root(self):
         """EVAL-005: Run validate.sh from repo root → exit 0, all three [OK] lines present."""
         returncode, output = run_validate(cwd=REPO_ROOT)

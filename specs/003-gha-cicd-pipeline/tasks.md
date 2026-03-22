@@ -46,7 +46,7 @@
 
 ### Implementation for User Story 1
 
-- [X] T006 [US1] Create `.github/workflows/ci.yml` with `validate` job: trigger on `pull_request` and `push` to `main`, runs on `ubuntu-24.04`, sets up Python 3.10 via `actions/setup-python@v5`, then invokes `.github/scripts/validate.sh` as a single step
+- [X] T006 [US1] Create `.github/workflows/ci.yml` with `validate` job: trigger on `pull_request` and `push` to `main`, runs on `ubuntu-24.04`, sets up Python 3.12 via `actions/setup-python@v5`, then invokes `.github/scripts/validate.sh` as a single step
 
 ### Evals for User Story 1
 
