@@ -22,6 +22,7 @@
 - [ ] T002 Remove `version` field from `.claude-plugin/marketplace.json` (FR-012)
 - [ ] T003 [P] Create `release-please-config.json` at repo root: `release-type: simple`, `packages` entry for `.` with `extra-files` pointing `$.version` jsonpath at `.claude-plugin/plugin.json` (FR-008)
 - [ ] T004 [P] Create `.release-please-manifest.json` at repo root with `{ ".": "1.0.1" }` matching current `plugin.json` version (FR-009)
+- [ ] T005 [P] Create `CONTRIBUTING.md` at repo root — conventional commit types, which types trigger a release vs not, branch naming, local validation steps, PR and release process, and agent-specific commit guidance (FR-014)
 
 ---
 

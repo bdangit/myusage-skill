@@ -80,6 +80,7 @@ A developer wants to run the same checks locally that CI will run, before openin
 - **FR-011**: All validation steps MUST be executable locally via a single command: `.github/scripts/validate.sh`.
 - **FR-012**: The `version` field MUST be removed from `.claude-plugin/marketplace.json`; `.claude-plugin/plugin.json` is the sole version source.
 - **FR-013**: The release job MUST require `pull-requests: write` permission in addition to `contents: write` so release-please can open and update Release PRs.
+- **FR-014**: Only `feat:`, `fix:`, and breaking change markers (`feat!:`, `fix!:`, `BREAKING CHANGE:`) MUST trigger a version bump. Non-skill commit types (`docs:`, `chore:`, `ci:`, `test:`, `refactor:`, `style:`) MUST NOT trigger a release. This convention MUST be documented in `CONTRIBUTING.md` for humans and agents.
 
 ### Key Entities
 
