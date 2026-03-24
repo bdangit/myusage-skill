@@ -9,11 +9,5 @@
   "license": "MIT",
   "skills": [
     "./SKILL.md"
-  ],
-  "platforms": [
-    "macos"
-  ],
-  "requirements": {
-    "python": ">=3.12"
-  }
+  ]
 }
