@@ -18,11 +18,11 @@
 
 **Purpose**: Create directory structure, clean up versioning, and add release-please config files before any CI logic is added.
 
-- [ ] T001 Create `.github/workflows/` and `.github/scripts/` directories in repo root
-- [ ] T002 Remove `version` field from `.claude-plugin/marketplace.json` (FR-012)
-- [ ] T003 [P] Create `release-please-config.json` at repo root: `release-type: simple`, `packages` entry for `.` with `extra-files` pointing `$.version` jsonpath at `.claude-plugin/plugin.json` (FR-008)
-- [ ] T004 [P] Create `.release-please-manifest.json` at repo root with `{ ".": "1.0.1" }` matching current `plugin.json` version (FR-009)
-- [ ] T005 [P] Create `CONTRIBUTING.md` at repo root — conventional commit types, which types trigger a release vs not, branch naming, local validation steps, PR and release process, and agent-specific commit guidance (FR-014)
+- [X] T001 Create `.github/workflows/` and `.github/scripts/` directories in repo root
+- [X] T002 Remove `version` field from `.claude-plugin/marketplace.json` (FR-012)
+- [X] T003 [P] Create `release-please-config.json` at repo root: `release-type: simple`, `packages` entry for `.` with `extra-files` pointing `$.version` jsonpath at `.claude-plugin/plugin.json` (FR-008)
+- [X] T004 [P] Create `.release-please-manifest.json` at repo root with `{ ".": "1.0.1" }` matching current `plugin.json` version (FR-009)
+- [X] T005 [P] Create `CONTRIBUTING.md` at repo root — conventional commit types, which types trigger a release vs not, branch naming, local validation steps, PR and release process, and agent-specific commit guidance (FR-014)
 
 ---
 
@@ -32,7 +32,7 @@
 
 **⚠️ CRITICAL**: US1 and US3 both depend on this phase completing first.
 
-- [ ] T005 Create `.github/scripts/validate.sh` — bash script with `set -e`, three sequential steps: `python3 -m py_compile scripts/generate_report.py`, SKILL.md frontmatter check (grep for `---` block containing `name:` and `description:` — uses `${SKILL_MD:-./SKILL.md}` env var so tests can override the path), and `python3 -m unittest discover -s evals -p "test_*.py" -v`. Each passing step prints `[OK] <check name>`. Make executable with `chmod +x`.
+- [X] T005 Create `.github/scripts/validate.sh` — bash script with `set -e`, three sequential steps: `python3 -m py_compile scripts/generate_report.py`, SKILL.md frontmatter check (grep for `---` block containing `name:` and `description:` — uses `${SKILL_MD:-./SKILL.md}` env var so tests can override the path), and `python3 -m unittest discover -s evals -p "test_*.py" -v`. Each passing step prints `[OK] <check name>`. Make executable with `chmod +x`.
 
 **Checkpoint**: T003/T004 config files exist and are valid JSON. T005 `validate.sh` passes on a clean checkout before proceeding.
 
@@ -46,14 +46,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Create `.github/workflows/ci.yml` with `validate` job: trigger on `pull_request` and `push` to `main`, runs on `ubuntu-24.04`, sets up Python 3.10 via `actions/setup-python@v5`, then invokes `.github/scripts/validate.sh` as a single step
+- [X] T006 [US1] Create `.github/workflows/ci.yml` with `validate` job: trigger on `pull_request` and `push` to `main`, runs on `ubuntu-24.04`, sets up Python 3.12 via `actions/setup-python@v5`, then invokes `.github/scripts/validate.sh` as a single step
 
 ### Evals for User Story 1
 
-- [ ] T007 [P] [US1] Create `evals/test_ci_validate.py` — EVAL-001: introduce a syntax error into a temp copy of `scripts/generate_report.py`, run `.github/scripts/validate.sh`, assert exit code is non-zero and stderr/stdout contains the filename
-- [ ] T008 [US1] Add EVAL-002 to `evals/test_ci_validate.py` — write a temp `SKILL.md` missing the `name:` field to a tempfile, set `SKILL_MD=<tempfile>` env var, run `.github/scripts/validate.sh`, assert exit code non-zero and output identifies the missing field
-- [ ] T009 [US1] Add EVAL-003 to `evals/test_ci_validate.py` — run `.github/scripts/validate.sh` on the real repo with no modifications, assert exit code is 0 and output contains three `[OK]` lines
-- [ ] T010 [US1] Run `python3 -m unittest evals/test_ci_validate.py -v` and confirm EVAL-001, EVAL-002, EVAL-003 all pass
+- [X] T007 [P] [US1] Create `evals/test_ci_validate.py` — EVAL-001: introduce a syntax error into a temp copy of `scripts/generate_report.py`, run `.github/scripts/validate.sh`, assert exit code is non-zero and stderr/stdout contains the filename
+- [X] T008 [US1] Add EVAL-002 to `evals/test_ci_validate.py` — write a temp `SKILL.md` missing the `name:` field to a tempfile, set `SKILL_MD=<tempfile>` env var, run `.github/scripts/validate.sh`, assert exit code non-zero and output identifies the missing field
+- [X] T009 [US1] Add EVAL-003 to `evals/test_ci_validate.py` — run `.github/scripts/validate.sh` on the real repo with no modifications, assert exit code is 0 and output contains three `[OK]` lines
+- [X] T010 [US1] Run `python3 -m unittest evals/test_ci_validate.py -v` and confirm EVAL-001, EVAL-002, EVAL-003 all pass
 
 **Checkpoint**: US1 fully functional — validate job exists, local script works, all three evals pass.
 
@@ -67,12 +67,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T011 [US2] Add `release` job to `.github/workflows/ci.yml`: `needs: validate`, `if: github.event_name == 'push'`, `permissions: contents: write, pull-requests: write`, single step using `googleapis/release-please-action@v4` with `token: ${{ secrets.GITHUB_TOKEN }}`, `config-file: release-please-config.json`, `manifest-file: .release-please-manifest.json`
+- [X] T011 [US2] Add `release` job to `.github/workflows/ci.yml`: `needs: validate`, `if: github.event_name == 'push'`, `permissions: contents: write, pull-requests: write`, single step using `googleapis/release-please-action@v4` with `token: ${{ secrets.GITHUB_TOKEN }}`, `config-file: release-please-config.json`, `manifest-file: .release-please-manifest.json`
 
 ### Evals for User Story 2
 
-- [ ] T012 [US2] Create `evals/test_release_config.py` — EVAL-004: parse `release-please-config.json` and `.release-please-manifest.json`, assert both are valid JSON, config has `release-type: simple` and an extra-files entry with `path: .claude-plugin/plugin.json` and `jsonpath: $.version`, and the version in manifest matches the version in `plugin.json`
-- [ ] T013 [US2] Run `python3 -m unittest evals/test_release_config.py -v` and confirm EVAL-004 passes
+- [X] T012 [US2] Create `evals/test_release_config.py` — EVAL-004: parse `release-please-config.json` and `.release-please-manifest.json`, assert both are valid JSON, config has `release-type: simple` and an extra-files entry with `path: .claude-plugin/plugin.json` and `jsonpath: $.version`, and the version in manifest matches the version in `plugin.json`
+- [X] T013 [US2] Run `python3 -m unittest evals/test_release_config.py -v` and confirm EVAL-004 passes
 
 **Checkpoint**: US2 fully functional — release job wired up with release-please, config files valid and in sync, EVAL-004 passes.
 
@@ -86,12 +86,12 @@
 
 ### Implementation for User Story 3
 
-- [ ] T014 [US3] Confirm `.github/scripts/validate.sh` is committed as executable (verify `git ls-files --stage .github/scripts/validate.sh` shows mode `100755`)
+- [X] T014 [US3] Confirm `.github/scripts/validate.sh` is committed as executable (verify `git ls-files --stage .github/scripts/validate.sh` shows mode `100755`)
 
 ### Evals for User Story 3
 
-- [ ] T015 [US3] Add EVAL-005 to `evals/test_ci_validate.py` — run `.github/scripts/validate.sh` as a subprocess from the repo root on an unmodified checkout, assert exit code 0 and output contains `[OK] Python syntax check`, `[OK] SKILL.md frontmatter`, `[OK] Evals`
-- [ ] T016 [US3] Run `python3 -m unittest evals/test_ci_validate.py -v` and confirm EVAL-005 passes alongside EVAL-001/002/003
+- [X] T015 [US3] Add EVAL-005 to `evals/test_ci_validate.py` — run `.github/scripts/validate.sh` as a subprocess from the repo root on an unmodified checkout, assert exit code 0 and output contains `[OK] Python syntax check`, `[OK] SKILL.md frontmatter`, `[OK] Evals`
+- [X] T016 [US3] Run `python3 -m unittest evals/test_ci_validate.py -v` and confirm EVAL-005 passes alongside EVAL-001/002/003
 
 **Checkpoint**: US3 complete — local validate script works identically to CI for any contributor.
 
@@ -99,9 +99,9 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T017 Run the full eval suite `python3 -m unittest discover -s evals -p "test_*.py" -v` and confirm zero failures across all evals (EVAL-001 through EVAL-005)
-- [ ] T018 Update `TODO.md` — mark CI pipeline tasks complete
-- [ ] T019 [P] Validate `quickstart.md` steps end-to-end: run `.github/scripts/validate.sh`, confirm output matches documented format
+- [X] T017 Run the full eval suite `python3 -m unittest discover -s evals -p "test_*.py" -v` and confirm zero failures across all evals (EVAL-001 through EVAL-005)
+- [X] T018 Update `TODO.md` — mark CI pipeline tasks complete
+- [X] T019 [P] Validate `quickstart.md` steps end-to-end: run `.github/scripts/validate.sh`, confirm output matches documented format
 
 ---
 
