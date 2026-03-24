@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/bdangit/myusage-skill/compare/v1.1.0...v1.1.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* remove invalid platforms and requirements fields from plugin.json ([763742a](https://github.com/bdangit/myusage-skill/commit/763742ad3d8937ceea6eb3dac35f35f9417f6074))
+* remove invalid platforms and requirements fields from plugin.json ([0b94781](https://github.com/bdangit/myusage-skill/commit/0b94781669d0f342bfcfa23ea79f1bbaec408666))
+
 ## [1.1.0](https://github.com/bdangit/myusage-skill/compare/v1.0.1...v1.1.0) (2026-03-24)
 
 
