@@ -1,15 +1,13 @@
 {
   "name": "myusage",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "Generate a personal AI usage insights report from local Claude Code and Copilot chat history.",
   "author": {
     "name": "bdangit"
   },
   "repository": "https://github.com/bdangit/myusage-skill",
   "license": "MIT",
-  "skills": ["./SKILL.md"],
-  "platforms": ["macos"],
-  "requirements": {
-    "python": ">=3.10"
-  }
+  "skills": [
+    "./skills/myusage"
+  ]
 }
