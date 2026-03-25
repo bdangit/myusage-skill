@@ -48,3 +48,14 @@ if [ -z "$n" ] || [ "$n" -eq 0 ]; then
 fi
 
 echo "[OK] Evals (${n} tests passed)"
+
+# Step 4: Plugin manifest validation (skipped if claude CLI not in PATH)
+if command -v claude > /dev/null 2>&1; then
+  if ! claude plugin validate . 2>&1 | grep -q "Validation passed"; then
+    echo "ERROR: claude plugin validate . failed" >&2
+    exit 1
+  fi
+  echo "[OK] Plugin manifest validation"
+else
+  echo "[SKIP] Plugin manifest validation (claude CLI not in PATH)"
+fi
