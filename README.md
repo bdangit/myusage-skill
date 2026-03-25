@@ -34,17 +34,21 @@ polished, self-contained HTML insights report.
 
 **Step 1** — add the marketplace source (one-time):
 
-```sh
-/plugin marketplace add bdangit/myusage-skill
-```
+| Claude Code | Copilot CLI |
+|---|---|
+| `claude plugin marketplace add bdangit/myusage-skill` | `copilot plugin marketplace add bdangit/myusage-skill` |
 
 **Step 2** — install the skill:
 
-```sh
-/plugin install myusage@myusage-skill
-```
+| Claude Code | Copilot CLI |
+|---|---|
+| `claude plugin install myusage@myusage-skill` | `copilot plugin install myusage@myusage-skill` |
 
-Works with Claude Code and Copilot CLI.
+## Updating
+
+| Claude Code | Copilot CLI |
+|---|---|
+| `claude plugin update myusage@myusage-skill` | `copilot plugin update myusage@myusage-skill` |
 
 ## Usage
 

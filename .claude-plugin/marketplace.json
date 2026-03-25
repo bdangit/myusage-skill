@@ -1,6 +1,8 @@
 {
   "name": "myusage-skill",
-  "description": "Personal AI usage insights — generate a self-contained HTML report from local Claude Code and Copilot chat history.",
+  "metadata": {
+    "description": "Personal AI usage insights — generate a self-contained HTML report from local Claude Code and Copilot chat history."
+  },
   "owner": {
     "name": "bdangit"
   },
@@ -9,7 +11,9 @@
       "name": "myusage",
       "source": "./",
       "description": "Generate a personal AI usage insights report from local Claude Code and Copilot chat history.",
-      "version": "1.0.0",
+      "skills": [
+        "./"
+      ],
       "author": {
         "name": "bdangit"
       },
