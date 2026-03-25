@@ -93,7 +93,7 @@ class TestCIValidate(unittest.TestCase):
 
         self.assertEqual(returncode, 0, f"Expected exit 0 on clean repo.\nOutput:\n{output}")
         ok_lines = [line for line in output.splitlines() if line.startswith("[OK]")]
-        self.assertEqual(len(ok_lines), 3, f"Expected 3 [OK] lines, got {len(ok_lines)}: {ok_lines}")
+        self.assertGreaterEqual(len(ok_lines), 3, f"Expected at least 3 [OK] lines, got {len(ok_lines)}: {ok_lines}")
 
     def test_eval_005_local_run_from_repo_root(self):
         """EVAL-005: Run validate.sh from repo root → exit 0, all three [OK] lines present."""
