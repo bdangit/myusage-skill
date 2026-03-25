@@ -9,7 +9,7 @@ import os
 import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'skills', 'myusage', 'scripts'))
 from generate_report import parse_copilot_vscode, build_report, PRU_UNIT_PRICE_USD
 
 FIXTURES = os.path.join(os.path.dirname(__file__), 'fixtures')

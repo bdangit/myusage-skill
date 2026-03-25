@@ -10,7 +10,7 @@ import sys
 import unittest
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "skills", "myusage", "scripts"))
 from generate_report import parse_claude_code, build_report, Session, TOKEN_PRICES  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")

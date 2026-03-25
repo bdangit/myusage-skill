@@ -12,7 +12,7 @@ import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'skills', 'myusage', 'scripts'))
 from generate_report import (
     parse_claude_code,
     parse_copilot_vscode,
