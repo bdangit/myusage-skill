@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2](https://github.com/bdangit/myusage-skill/compare/v1.1.1...v1.1.2) (2026-03-25)
+
+
+### Bug Fixes
+
+* add plugin manifest validation and fix marketplace.json schema error ([13d8e14](https://github.com/bdangit/myusage-skill/commit/13d8e14b921086eed95eb6b3ed775f6fdad84ab7))
+* plugin manifest validation and dual-CLI install docs ([d15153d](https://github.com/bdangit/myusage-skill/commit/d15153d46e3a0e80a255cfa1606663587797cc65))
+
 ## [1.1.1](https://github.com/bdangit/myusage-skill/compare/v1.1.0...v1.1.1) (2026-03-24)
 
 

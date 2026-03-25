@@ -1,6 +1,6 @@
 {
   "name": "myusage",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Generate a personal AI usage insights report from local Claude Code and Copilot chat history.",
   "author": {
     "name": "bdangit"
