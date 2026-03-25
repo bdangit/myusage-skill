@@ -8,6 +8,6 @@
   "repository": "https://github.com/bdangit/myusage-skill",
   "license": "MIT",
   "skills": [
-    "./SKILL.md"
+    "./skills/myusage"
   ]
 }

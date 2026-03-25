@@ -15,7 +15,7 @@ import unittest
 
 # Resolve paths relative to this file
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT = os.path.join(REPO_ROOT, "scripts", "generate_report.py")
+SCRIPT = os.path.join(REPO_ROOT, "skills", "myusage", "scripts", "generate_report.py")
 FIXTURES = os.path.join(REPO_ROOT, "evals", "fixtures")
 CLAUDE_FIXTURES = os.path.join(FIXTURES, "claude_code")
 VSCODE_FIXTURES = os.path.join(FIXTURES, "copilot_vscode")

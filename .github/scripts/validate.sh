@@ -5,10 +5,10 @@ set -e
 # which runs the eval suite, which would call validate.sh again).
 export VALIDATE_SH_RUNNING=1
 
-SKILL_MD="${SKILL_MD:-./SKILL.md}"
+SKILL_MD="${SKILL_MD:-./skills/myusage/SKILL.md}"
 
 # Step 1: Python syntax check
-python3 -m py_compile scripts/generate_report.py
+python3 -m py_compile skills/myusage/scripts/generate_report.py
 echo "[OK] Python syntax check"
 
 # Step 2: SKILL.md frontmatter check

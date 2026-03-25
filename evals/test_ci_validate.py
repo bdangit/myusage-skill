@@ -55,7 +55,7 @@ class TestCIValidate(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             scripts_dir = os.path.join(tmpdir, "scripts")
             os.makedirs(scripts_dir)
-            src = os.path.join(REPO_ROOT, "scripts", "generate_report.py")
+            src = os.path.join(REPO_ROOT, "skills", "myusage", "scripts", "generate_report.py")
             bad_py = os.path.join(scripts_dir, "generate_report.py")
             shutil.copy(src, bad_py)
             with open(bad_py, "a") as f:
@@ -63,7 +63,7 @@ class TestCIValidate(unittest.TestCase):
 
             evals_dst = os.path.join(tmpdir, "evals")
             shutil.copytree(os.path.join(REPO_ROOT, "evals"), evals_dst)
-            shutil.copy(os.path.join(REPO_ROOT, "SKILL.md"), os.path.join(tmpdir, "SKILL.md"))
+            shutil.copy(os.path.join(REPO_ROOT, "skills", "myusage", "SKILL.md"), os.path.join(tmpdir, "SKILL.md"))
 
             returncode, output = run_validate(cwd=tmpdir)
 
