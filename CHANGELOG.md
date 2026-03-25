@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/bdangit/myusage-skill/compare/v1.1.2...v1.1.3) (2026-03-25)
+
+
+### Bug Fixes
+
+* enable /myusage slash command in Copilot CLI ([#20](https://github.com/bdangit/myusage-skill/issues/20)) ([2814bfe](https://github.com/bdangit/myusage-skill/commit/2814bfef44b061466049125ce1fff595815fba89))
+
 ## [1.1.2](https://github.com/bdangit/myusage-skill/compare/v1.1.1...v1.1.2) (2026-03-25)
 
 
