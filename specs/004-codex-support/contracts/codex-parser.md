@@ -50,7 +50,7 @@ For every `Session` object returned:
 | `duration_seconds` | `(end_time - start_time).total_seconds()` — may be `0.0` |
 | `project_path` | String or `None` |
 | `model` | String (from DB or rollout JSONL) or `None` if unresolvable |
-| `mode` | `"suggest"`, `"auto-edit"`, `"full-auto"`, or `None` |
+| `mode` | `"on-request"` (default), `"never"`, `"on-failure"`, `"untrusted"`, or `None` |
 | `codex_source` | `"cli"`, `"vscode"`, or `None` |
 | `message_count` | `>= 0`; count of non-system user `response_item` events in rollout |
 | `messages` | `List[Message]` for user `response_item` events (may be empty) |

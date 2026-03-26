@@ -34,9 +34,9 @@ description: "Task list for 004-codex-support"
 
 **⚠️ CRITICAL**: Eval tests for every user story read from these fixtures. No user story eval can run until this phase is complete.
 
-- [ ] T003 [P] Create `evals/fixtures/codex/rollouts/session-codex-001.jsonl` — 2 non-system user `response_item` events, model explicit in database (do not include `turn_context`), category keyword: "debug"
-- [ ] T004 [P] Create `evals/fixtures/codex/rollouts/session-codex-002.jsonl` — 3 non-system user `response_item` events, `turn_context` event with `model: "o3"` (database model=NULL for this session), category keyword: "implement"
-- [ ] T005 [P] Create `evals/fixtures/codex/rollouts/session-codex-003.jsonl` — 1 non-system user `response_item` event, source `vscode` in database, model explicit, category keyword: "explain"
+- [ ] T003 [P] Create `evals/fixtures/codex/rollouts/session-codex-001.jsonl` — `turn_context` line (model omitted — model set in DB row), 2 `response_item` user lines with category keyword "debug"; no `event_msg user_message` line needed (first_user_message comes from DB)
+- [ ] T004 [P] Create `evals/fixtures/codex/rollouts/session-codex-002.jsonl` — `turn_context` line with `"model": "o3"` (DB model=NULL for this session), 3 `response_item` user lines with category keyword "implement"
+- [ ] T005 [P] Create `evals/fixtures/codex/rollouts/session-codex-003.jsonl` — `turn_context` line (model explicit), 1 `response_item` user line with category keyword "explain"; session has `source="vscode"` in DB
 
 **Checkpoint**: Fixture files committed — eval tests for all user stories can now be written.
 
@@ -53,11 +53,11 @@ description: "Task list for 004-codex-support"
 ### Implementation for User Story 1
 
 - [ ] T006 [US1] Implement `_find_codex_db(codex_dir: str) -> Optional[str]` helper (glob `state_*.sqlite`, pick highest N) in `skills/myusage/scripts/generate_report.py`
-- [ ] T007 [US1] Implement `parse_codex(codex_dir: str) -> List[Session]` — DB discovery via `_find_codex_db()`, `sqlite3` read-only query of `threads` table, Session construction (tool=`"codex"`, `input_tokens=tokens_used`, `output_tokens=None`, `codex_source` from `source` column, `mode` from `approval_mode`), rollout JSONL parsing for model resolution (FR-003) and user message counting via `_is_system_message()` (FR-004), `classify_session_character()` + `categorize_session()` calls — in `skills/myusage/scripts/generate_report.py`
+- [ ] T007 [US1] Implement `parse_codex(codex_dir: str) -> List[Session]` — DB discovery via `_find_codex_db()`, `sqlite3` read-only query of `threads` table (columns: `id`, `rollout_path`, `created_at`, `updated_at`, `source`, `cwd`, `tokens_used`, `first_user_message`, `model`, `approval_mode`; skip rows where `archived=1`), Session construction (tool=`"codex"`, `input_tokens=tokens_used`, `output_tokens=None`, `codex_source` from `source` column, `mode` from `approval_mode`), rollout JSONL parsing for (1) model resolution when DB `model` IS NULL via `turn_context` line and (2) user `response_item` message counting via `_is_system_message()`, `first_user_message` from DB used directly for `categorize_session()` (no rollout read for this), `classify_session_character()` + `categorize_session()` calls — in `skills/myusage/scripts/generate_report.py`
 - [ ] T008 [US1] Add Codex exclusion guard to `compute_session_costs()` — Codex sessions (tool=`"codex"`) MUST have `estimated_cost_usd = None` and `effective_prus = None` — in `skills/myusage/scripts/generate_report.py`
 - [ ] T009 [US1] Integrate `parse_codex(args.codex_dir)` call in `main()` alongside `parse_claude_code`, `parse_copilot_vscode`, `parse_copilot_cli` in `skills/myusage/scripts/generate_report.py`
 - [ ] T010 [P] [US1] Create `evals/test_codex_missing.py` — EVAL-002: assert `parse_codex("/nonexistent/")` returns `[]`; assert full report run with `--codex-dir /nonexistent/` exits 0
-- [ ] T011 [US1] Create `evals/test_codex_parse.py` — EVAL-001: construct fixture SQLite DB in `setUp()` with 3 sessions matching fixture rollout files; call `parse_codex(fixture_dir)`; assert session count=3, assert token totals match fixture values, assert model names resolved correctly for sessions with and without DB-level model
+- [ ] T011 [US1] Create `evals/test_codex_parse.py` — EVAL-001: construct fixture `state_5.sqlite` DB in `setUp()` using the verified schema (all NOT NULL columns required: `id`, `rollout_path`, `created_at`, `updated_at`, `source`, `model_provider`, `cwd`, `title`, `sandbox_policy`, `approval_mode`, plus `tokens_used`, `has_user_event`, `archived`, `first_user_message`, and nullable `model`); call `parse_codex(fixture_dir)`; assert session count=3, assert token totals match fixture values, assert model names resolved correctly for sessions with and without DB-level model
 
 **Checkpoint**: US1 complete — `parse_codex()` works end-to-end, Codex sessions appear in the generated report, no-DB path is safe.
 
@@ -73,7 +73,7 @@ description: "Task list for 004-codex-support"
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Verify `parse_codex()` `messages` list is populated with user-role `response_item` `Message` objects from rollout JSONL — enabling `categorize_session()` access to first-message content; adjust rollout parsing in T007 if the message list is empty or missing the first user message — in `skills/myusage/scripts/generate_report.py`
+- [ ] T012 [US2] Verify `parse_codex()` uses `first_user_message` from the `threads` DB row to construct a synthetic `Message` for `categorize_session()` — this column is directly available (migration 0007, NOT NULL with default `''`); no rollout JSONL read needed for categorization. Confirm `session.messages` list is populated with user-role `response_item` `Message` objects from rollout JSONL for `message_count` only — in `skills/myusage/scripts/generate_report.py`
 - [ ] T013 [US2] Extend `evals/test_codex_parse.py` — EVAL-003: assert session-codex-001 category contains "Debug", session-codex-002 category matches "Code Generation" (or equivalent for "implement"), session-codex-003 category matches expected keyword for "explain"
 - [ ] T014 [US2] Extend `evals/test_codex_parse.py` — EVAL-004: assert session-codex-002 `session.model == "o3"` (resolved from rollout `turn_context`, not from DB where model is NULL)
 

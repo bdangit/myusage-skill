@@ -82,10 +82,15 @@ Eval fixtures follow the same `evals/fixtures/<tool>/` convention as `copilot_cl
 Follows the same signature and structure as `parse_copilot_cli()` and `parse_claude_code()`.
 - `codex_dir` defaults to `~/.codex/` in `main()` via `--codex-dir` CLI arg
 - When `codex_dir` does not exist, returns `[]` (graceful skip — satisfies FR-009)
-- Globs for `state_*.sqlite` files, sorts by version number N, picks the highest
-- Opens the database with `sqlite3` (read-only mode via `uri=True`)
-- Queries the `threads` table; builds one `Session` per row
-- For each session, reads the rollout JSONL file (path from `threads.rollout_path`) to resolve model name and count user messages
+- Looks for `state_5.sqlite` first; falls back to glob `state_*.sqlite` picking highest N
+- Opens the database with `sqlite3` (read-only, URI mode)
+- Queries the `threads` table filtering `WHERE archived = 0`; builds one `Session` per row
+- Uses `first_user_message` column (added in migration 0007) **directly from the DB** to construct a synthetic `Message` for `categorize_session()` — no rollout parsing needed for categorization
+- For each session, reads the rollout JSONL file only when: (1) `model` column is NULL/empty → scan for `turn_context` line for model resolution; (2) counting user `response_item` messages
+
+> **Schema verification**: Confirmed against `openai/codex` commit `4b50446` on 2026-03-26 using
+> GitHub MCP tool. DB version constant: `STATE_DB_VERSION = 5` → filename `state_5.sqlite`.
+> The Codex binary was NOT installed; source was read directly from the public repository.
 
 ### 2. Token storage strategy
 
@@ -132,8 +137,9 @@ FR-004: count `response_item` events where `role == "user"` and content is non-s
 
 Use existing `classify_session_character()` and `categorize_session()` functions unchanged.
 The `categorize_session()` function uses the first user `Message.content` in `session.messages`.
-The `parse_codex()` parser populates `session.messages` with `Message` objects constructed from
-`response_item` events in the rollout JSONL (user role only — same pattern as other parsers).
+The `parse_codex()` parser constructs a synthetic `Message` from `threads.first_user_message`
+(the column added in migration 0007, directly readable from the DB — **no rollout JSONL read needed**).
+If `first_user_message` is empty, the fallback is to scan user `response_item` events in the rollout.
 
 ### 7. Eval fixtures: SQLite binary vs. in-test construction
 
