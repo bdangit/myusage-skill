@@ -1,7 +1,3 @@
----
-description: "Task list for 004-codex-support"
----
-
 # Tasks: Codex Platform Support
 
 **Input**: Design documents from `/specs/004-codex-support/`

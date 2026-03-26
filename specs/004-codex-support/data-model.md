@@ -14,6 +14,7 @@
 
 ```python
 import glob, os, re
+from typing import Optional
 
 def _find_codex_db(codex_dir: str) -> Optional[str]:
     """Return path to the active state_N.sqlite, or None."""

@@ -35,7 +35,7 @@ stdlib.
 - [x] **Evals-First**: EVAL-001 through EVAL-005 defined in spec, covering all three user stories.
 - [x] **Agent Agnostic**: Implementation is in a Python script with no agent-specific syntax. No CLAUDE.md or Copilot-specific execution paths in generator code.
 - [x] **Zero Dependencies**: `sqlite3` is Python stdlib — zero net-new runtime dependencies. Chart.js remains the only approved exception.
-- [x] **Simplicity**: One new parser function + two new dataclass fields + fixture files + eval tests. No new abstractions. Minimum viable design.
+- [x] **Simplicity**: One new parser function + one new dataclass field + fixture files + eval tests. No new abstractions. Minimum viable design.
 - [x] **Trunk-Based**: This is a spec branch (docs only). Implementation will happen on `004-codex-support-impl` after this spec merges to `main`.
 - [x] **LLM-Agnostic Insights**: Codex sessions are stored under tool identifier `"codex"` derived from the data, not hardcoded. Report labels use existing neutral terminology. Eval fixtures included per FR-010/FR-011.
 
@@ -51,7 +51,7 @@ specs/004-codex-support/
 ├── quickstart.md        # Phase 1 output
 ├── contracts/           # Phase 1 output
 │   └── codex-parser.md
-└── tasks.md             # Phase 2 output (/speckit.tasks — not created here)
+└── tasks.md             # Phase 2 output (speckit.tasks-aligned; created in this branch)
 ```
 
 ### Source Code (repository root)
@@ -63,8 +63,7 @@ skills/myusage/scripts/
 evals/
 ├── fixtures/
 │   └── codex/               # New: Codex fixture data
-│       ├── state_5.sqlite   # Pre-built SQLite database (3 synthetic sessions)
-│       └── rollouts/        # Per-session JSONL rollout files
+│       └── rollouts/        # Per-session JSONL rollout files (SQLite constructed in test setUp())
 │           ├── session-codex-001.jsonl
 │           ├── session-codex-002.jsonl
 │           └── session-codex-003.jsonl
@@ -73,7 +72,7 @@ evals/
 
 **Structure Decision**: Single-file project. All implementation in `generate_report.py`.
 Eval fixtures follow the same `evals/fixtures/<tool>/` convention as `copilot_cli` and
-`copilot_vscode`. The SQLite fixture is a committed binary (minimal, ~20KB).
+`copilot_vscode`. The SQLite fixture is constructed programmatically in test `setUp()` (see Decision 7).
 
 ## Design Decisions
 
@@ -98,8 +97,9 @@ The Codex `threads` table provides only `tokens_used` (combined total; no input/
 Per FR-012, cost estimation is impossible and must display `—`.
 
 **Decision**: Store `tokens_used` in `session.input_tokens`; set `session.output_tokens = None`.
-This re-uses the existing field without adding a new `Session` field. The `compute_session_costs()`
-function already returns early if `output_tokens is None` for Copilot-style cost calculation.
+This re-uses the existing field without adding a new `Session` field. In the current
+`compute_session_costs()` implementation, Copilot cost is derived from PRU multipliers and
+Claude cost from per-token pricing — neither path applies to Codex.
 For Codex, the function MUST explicitly skip cost computation (set `estimated_cost_usd = None`).
 The HTML renderer checks `session.tool == "codex"` to display `—` in cost columns with a footnote.
 

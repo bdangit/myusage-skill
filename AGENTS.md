@@ -1,6 +1,6 @@
 # myusage-skill Development Guidelines
 
-Last updated: 2026-03-17
+Last updated: 2026-03-25
 
 ## What this repo is
 
@@ -18,7 +18,7 @@ The six non-negotiable principles are: **Evals-First**, **Agent CLI Agnostic**,
 
 ## Active Technologies
 
-- **Language**: Python 3.8+ (stdlib only — no pip installs)
+- **Language**: Python 3.10+ (stdlib only — no pip installs)
 - **Frontend**: Chart.js 4.x (fetched from CDN at report generation time, inlined into output HTML)
 
 ## Project Structure
@@ -27,15 +27,18 @@ The six non-negotiable principles are: **Evals-First**, **Agent CLI Agnostic**,
 myusage-skill/
 ├── SKILL.md                        # Skill definition (triggers + agent instructions)
 ├── AGENTS.md                       # This file (agent-agnostic guidelines)
-├── CLAUDE.md                       # Claude Code-specific variant of this file
-├── scripts/
-│   └── generate_report.py          # Report generator
+├── CLAUDE.md                       # Symlink to AGENTS.md
+├── skills/
+│   └── myusage/
+│       └── scripts/
+│           └── generate_report.py  # Report generator
 └── evals/
     ├── evals.json                   # Eval definitions
     └── fixtures/                    # Synthetic test data mirroring real source layouts
         ├── claude_code/
         ├── copilot_vscode/
-        └── copilot_cli/
+        ├── copilot_cli/
+        └── codex/
 ```
 
 ## Commands
@@ -50,13 +53,15 @@ python -m unittest discover -s evals -p "test_*.py"
 
 ## Code Style
 
-- Python 3.8+ standard conventions
+- Python 3.10+ standard conventions
 - No external linting tools required (stdlib only project)
 
 ## Feature Branches
 
 - `001-usage-insights-report` — core report generation (complete, merged to main)
 - `002-copilot-pru-cost` — PRU and token cost comparison spec (merged to main)
+- `003-gha-cicd-pipeline` — GHA CI/CD pipeline (merged to main)
+- `004-codex-support` — Codex platform support (spec merged, implementation in progress)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

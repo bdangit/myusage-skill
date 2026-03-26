@@ -128,6 +128,16 @@ opaque to reviewers. Mocking `sqlite3` — rejected; tests the mock, not the par
 
 ---
 
+## Decision 5: `--codex-dir` CLI argument
+
+**Decision**: Add `--codex-dir` argument to `generate_report.py` defaulting to `~/.codex/`.
+**Rationale**: Follows the exact pattern of `--claude-dir`, `--vscode-dir`, `--copilot-cli-dir`.
+Overridable for tests without any mocking. Consistent and zero-friction for end users.
+**Alternatives considered**: Hard-coding `~/.codex/` and using monkeypatching in tests —
+rejected; makes tests environment-dependent and fragile.
+
+---
+
 ## Decision 6: DB file discovery
 
 **Decision**: Look for `state_5.sqlite` by name in `codex_dir`, with a glob fallback to
@@ -138,13 +148,3 @@ so in practice only one `state_N.sqlite` file will exist. The glob fallback hand
 version bumps gracefully without requiring a spec update.
 **Source**: `codex-rs/state/src/lib.rs` (`STATE_DB_FILENAME = "state"`, `STATE_DB_VERSION = 5`),
 `codex-rs/state/src/runtime.rs` (`state_db_filename()`, `remove_legacy_db_files()`).
-
----
-
-## Decision 5: `--codex-dir` CLI argument
-
-**Decision**: Add `--codex-dir` argument to `generate_report.py` defaulting to `~/.codex/`.
-**Rationale**: Follows the exact pattern of `--claude-dir`, `--vscode-dir`, `--copilot-cli-dir`.
-Overridable for tests without any mocking. Consistent and zero-friction for end users.
-**Alternatives considered**: Hard-coding `~/.codex/` and using monkeypatching in tests —
-rejected; makes tests environment-dependent and fragile.
