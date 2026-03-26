@@ -1,109 +1,69 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Codex Platform Support
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Branch**: `004-codex-support` | **Date**: 2026-03-26 | **Spec**: [spec.md](./spec.md)
+**Input**: Feature specification from `/specs/004-codex-support/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Add OpenAI Codex as a fourth supported tool source in the report generator. This requires a new `parse_codex()` function that reads from the local Codex SQLite session database (`~/.codex/state_5.sqlite`) and, for each thread row, reads an associated JSONL rollout file to resolve the model name and count user turns. Codex sessions are aggregated under the tool key `"codex"` and participate in all existing report sections (platform breakdown, activity timeline, session character, category). Cost estimation is omitted for Codex (only a combined token total is available). The `Session` dataclass gains a `total_tokens` field to carry the combined value.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.10+ (stdlib only — `sqlite3`, `json`, `os`, `pathlib`)
+**Primary Dependencies**: None — `sqlite3` is a stdlib module; no pip installs
+**Storage**: `~/.codex/state_5.sqlite` (SQLite) + `~/.codex/sessions/rollout-*.jsonl` (JSONL rollout files referenced by absolute path in the `threads.rollout_path` column)
+**Testing**: `python -m unittest discover -s evals -p "test_*.py"` — new `evals/test_codex.py` + synthetic fixtures under `evals/fixtures/codex/`
+**Target Platform**: macOS / Linux (same as existing parsers)
+**Project Type**: Additional parser module within an existing report generator CLI
+**Performance Goals**: No measurable regression — parse 500 Codex sessions within existing 180s time budget
+**Constraints**: Python stdlib only; graceful skip if database absent or locked; no cost estimates for Codex
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- [ ] **Evals-First**: Evals are planned for every user story in this feature.
-- [ ] **Agent Agnostic**: No agent-specific syntax, tools, or assumptions in the design.
-- [ ] **Zero Dependencies**: Zero net-new runtime dependencies, or each is listed and justified below.
-- [ ] **Simplicity**: No premature abstractions; design is the minimum needed for the feature.
-- [ ] **Trunk-Based**: This is a spec branch (docs only). Implementation will happen on a separate `-impl` branch after this spec is merged to `main`.
-- [ ] **LLM-Agnostic Insights**: No vendor names hardcoded in generator output; report labels use neutral terminology; each new tool source has an eval fixture.
+- [x] **Evals-First**: EVAL-001 through EVAL-005 defined in spec.md, one per user story plus edge cases.
+- [x] **Agent Agnostic**: Parser reads local files directly; no agent-specific APIs. validate.sh unchanged.
+- [x] **Zero Dependencies**: `sqlite3` is Python stdlib. No new pip packages.
+- [x] **Simplicity**: One new function `parse_codex()`, one new `Session.total_tokens` field, one new CLI arg `--codex-dir`. No new abstractions.
+- [x] **Trunk-Based**: This is a spec branch — docs only. Implementation goes on `004-codex-support-impl` after this spec is merged.
+- [x] **LLM-Agnostic Insights**: `"codex"` is a data source identifier (same pattern as `"claude_code"`, `"copilot_cli"`). The `"Codex"` display label follows the existing `TOOL_LABELS` pattern. No LLM assumptions hardcoded.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/004-codex-support/
+├── plan.md              # This file
+├── research.md          # Phase 0 output
+├── data-model.md        # Phase 1 output
+├── quickstart.md        # Phase 1 output
+├── contracts/           # Phase 1 output
+│   └── parse-codex.md
+└── tasks.md             # Phase 2 output (/speckit.tasks — not created here)
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+skills/myusage/scripts/
+└── generate_report.py          # +parse_codex(), +Session.total_tokens, +--codex-dir arg,
+                                 #  +TOOL_LABELS["codex"], +ACCENT_COLORS["codex"]
 
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+evals/
+├── fixtures/
+│   └── codex/
+│       ├── state_5.sqlite       # Synthetic SQLite DB (3+ thread rows)
+│       └── sessions/
+│           ├── rollout-sess-001.jsonl
+│           ├── rollout-sess-002.jsonl
+│           └── rollout-sess-003.jsonl
+└── test_codex.py                # New: EVAL-001 through EVAL-005
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Flat extension of the existing single-file generator. No new modules or packages. Fixture format mirrors real Codex storage: one SQLite file + sibling `sessions/` folder with JSONL rollout files referenced by absolute path (paths in SQLite fixture will use a helper to rewrite to the test temp dir at test setup time).
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+No constitution violations. All gates pass.
