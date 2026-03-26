@@ -1,6 +1,6 @@
 # myusage-skill Development Guidelines
 
-Last updated: 2026-03-21
+Last updated: 2026-03-26
 
 ## What this repo is
 
@@ -21,6 +21,8 @@ The six non-negotiable principles are: **Evals-First**, **Agent CLI Agnostic**,
 - Local filesystem — reads existing Copilot/Claude Code session files already parsed by feature 001. (002-copilot-pru-cost-impl)
 - Bash (primary), Python 3.10 stdlib (version bump + JSON validation only) + GHA actions only — `actions/checkout@v4`, `actions/setup-python@v5`, `softprops/action-gh-release@v2` (CI infrastructure, not runtime deps) (003-gha-cicd-pipeline)
 - `.claude-plugin/plugin.json` (read/write), `.claude-plugin/marketplace.json` (read/validate) (003-gha-cicd-pipeline)
+- Python 3.10+ (stdlib only — per constitution Principle III) + `sqlite3` stdlib module (already built-in — zero net-new dependencies) (004-codex-support)
+- `~/.codex/state_N.sqlite` (read-only SQLite) + rollout JSONL files (read-only) (004-codex-support)
 
 - **Language**: Python 3.10+ (stdlib only — no pip installs)
 - **Frontend**: Chart.js 4.x (fetched from CDN at report generation time, inlined into output HTML)
@@ -66,5 +68,6 @@ python -m unittest discover -s evals -p "test_*.py"
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 004-codex-support: Added Python 3.10+ (stdlib only — per constitution Principle III) + `sqlite3` stdlib module (already built-in — zero net-new dependencies)
 - 003-gha-cicd-pipeline: Added Bash (primary), Python 3.10 stdlib (version bump + JSON validation only) + GHA actions only — `actions/checkout@v4`, `actions/setup-python@v5`, `softprops/action-gh-release@v2` (CI infrastructure, not runtime deps)
 - 002-copilot-pru-cost-impl: Added Python 3.10+ (stdlib only — per constitution Principle III) + None (stdlib only). Chart.js inlined at report generation time (approved exception).
