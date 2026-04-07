@@ -2531,8 +2531,9 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             {''.join([f'<td>' + (f"{tool_prus[t]:.1f}" if tool_prus[t] is not None else "N/A") + '</td>']) if has_prus else ''}
             {''.join([f'<td title="Estimated at list price; plan allowances may reduce actual cost">' + (f"${tool_cost[t]:.4f}" if tool_cost[t] is not None else "N/A") + '</td>']) if has_costs else ''}
           </tr>""" for t in tool_names)}
-       {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">' + cost_footnote + '</p>' if has_costs else ''}
+        </tbody>
       </table>
+      {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">' + cost_footnote + '</p>' if has_costs else ''}
       {token_html}
     </div>
   </div>
