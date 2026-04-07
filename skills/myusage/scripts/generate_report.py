@@ -154,6 +154,11 @@ def _parse_unix_ms(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
 
 
+def _parse_unix_seconds(seconds: int) -> datetime:
+    """Parse Unix second timestamp to UTC-aware datetime."""
+    return datetime.fromtimestamp(seconds, tz=timezone.utc)
+
+
 def _map_permission_mode(pm: Optional[str]) -> str:
     """Map Claude Code permissionMode field to a canonical mode string."""
     if pm == "plan":
@@ -787,7 +792,7 @@ def parse_codex_database(db_path: Path) -> List[Session]:
     """
     Connect to SQLite database at db_path.
     Query the threads table.
-    For each row, extract session metadata (id, created_at, updated_at, working_directory,
+    For each row, extract session metadata (id, created_at, updated_at, cwd,
     tokens_used, cli_version, source, approval_mode, rollout_path).
     If model field is NULL, resolve via extract_model_from_rollout() using the rollout_path from the row.
     Call count_user_messages_in_rollout() to populate user_message_count.
@@ -808,7 +813,7 @@ def parse_codex_database(db_path: Path) -> List[Session]:
         
         # Query threads table
         cursor.execute("""
-            SELECT id, created_at, updated_at, working_directory, tokens_used, 
+            SELECT id, created_at, updated_at, cwd, tokens_used, 
                    model, cli_version, source, approval_mode, rollout_path
             FROM threads
         """)
@@ -817,7 +822,7 @@ def parse_codex_database(db_path: Path) -> List[Session]:
             session_id = row["id"]
             created_at_str = row["created_at"]
             updated_at_str = row["updated_at"]
-            working_directory = row["working_directory"]
+            working_directory = row["cwd"]
             tokens_used = row["tokens_used"] or 0
             model = row["model"]
             cli_version = row["cli_version"]
@@ -825,10 +830,17 @@ def parse_codex_database(db_path: Path) -> List[Session]:
             approval_mode = row["approval_mode"]
             rollout_path_str = row["rollout_path"]
             
-            # Parse timestamps
+            # Parse timestamps - handle both ISO Z format (string) and Unix timestamps (int)
             try:
-                start_time = _parse_iso_z(created_at_str)
-                end_time = _parse_iso_z(updated_at_str)
+                if isinstance(created_at_str, int):
+                    start_time = _parse_unix_seconds(created_at_str)
+                else:
+                    start_time = _parse_iso_z(created_at_str)
+                
+                if isinstance(updated_at_str, int):
+                    end_time = _parse_unix_seconds(updated_at_str)
+                else:
+                    end_time = _parse_iso_z(updated_at_str)
             except (ValueError, TypeError):
                 print(f"Warning: invalid timestamps for Codex session {session_id}", file=sys.stderr)
                 continue
