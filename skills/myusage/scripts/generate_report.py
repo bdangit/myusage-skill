@@ -28,6 +28,16 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import urllib.request
 import urllib.error
+import sqlite3
+
+
+# ---------------------------------------------------------------------------
+# Platform Constants
+# ---------------------------------------------------------------------------
+
+# Codex session database location — highest version number takes precedence
+CODEX_HOME_DIR = Path.home() / ".codex"
+CODEX_DB_PATTERN = "state_*.sqlite"
 
 
 # ---------------------------------------------------------------------------
@@ -625,6 +635,276 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
         session.category = categorize_session(session)
         sessions.append(session)
 
+    return sessions
+
+
+# ---------------------------------------------------------------------------
+# Parser: Codex
+# ---------------------------------------------------------------------------
+
+def discover_codex_database() -> Optional[Path]:
+    """
+    Search ~/.codex/ for files matching state_*.sqlite.
+    Return the highest-numbered version (e.g., prefer state_5.sqlite over state_4.sqlite).
+    Return None if no database files found.
+    On error (permission denied, etc.), log a warning to stderr and return None.
+    """
+    if not CODEX_HOME_DIR.exists():
+        return None
+    
+    try:
+        db_files = list(CODEX_HOME_DIR.glob(CODEX_DB_PATTERN))
+        if not db_files:
+            return None
+        
+        # Extract version numbers and sort
+        def extract_version(p: Path) -> int:
+            try:
+                # state_5.sqlite -> 5
+                stem = p.stem  # "state_5"
+                parts = stem.split("_")
+                if len(parts) == 2 and parts[0] == "state":
+                    return int(parts[1])
+                return 0
+            except (ValueError, IndexError):
+                return 0
+        
+        db_files.sort(key=extract_version, reverse=True)
+        return db_files[0]
+    
+    except (OSError, PermissionError) as exc:
+        print(f"Warning: cannot access Codex database directory: {exc}", file=sys.stderr)
+        return None
+
+
+def extract_model_from_rollout(rollout_path: Path) -> Optional[str]:
+    """
+    Open the JSONL file at rollout_path.
+    Iterate through lines (one JSON object per line).
+    Find the first turn_context event.
+    Extract and return the model field (or equivalent model name field).
+    If not found or file is missing/corrupted, log a warning and return None.
+    Handle exceptions gracefully (return None on parse errors).
+    """
+    if not rollout_path.exists():
+        return None
+    
+    try:
+        with open(rollout_path, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "turn_context":
+                        model = event.get("model")
+                        if model:
+                            return model
+                except json.JSONDecodeError as exc:
+                    print(
+                        f"Warning: skipping malformed JSON in {rollout_path} line {lineno}: {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
+        return None
+    except OSError as exc:
+        print(f"Warning: cannot read rollout file {rollout_path}: {exc}", file=sys.stderr)
+        return None
+
+
+def count_user_messages_in_rollout(rollout_path: Path) -> int:
+    """
+    Open the JSONL file at rollout_path.
+    Iterate through lines.
+    Count response_item events where role == "user" and message contains non-system text.
+    Return the count (default to 0 if file missing or corrupted).
+    Log warnings on parse errors but do not raise.
+    """
+    if not rollout_path.exists():
+        return 0
+    
+    count = 0
+    try:
+        with open(rollout_path, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "response_item":
+                        if event.get("role") == "user":
+                            # Check for non-system text
+                            content = event.get("content", "")
+                            if content and not content.startswith("<"):
+                                count += 1
+                except json.JSONDecodeError as exc:
+                    print(
+                        f"Warning: skipping malformed JSON in {rollout_path} line {lineno}: {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
+    except OSError as exc:
+        print(f"Warning: cannot read rollout file {rollout_path}: {exc}", file=sys.stderr)
+        return 0
+    
+    return count
+
+
+def extract_first_user_message_from_rollout(rollout_path: Path) -> str:
+    """
+    Extract the first user message from the rollout file for categorization.
+    Return empty string if not found.
+    """
+    if not rollout_path.exists():
+        return ""
+    
+    try:
+        with open(rollout_path, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "response_item":
+                        if event.get("role") == "user":
+                            content = event.get("content", "")
+                            if content and not content.startswith("<"):
+                                return content
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        pass
+    
+    return ""
+
+
+def parse_codex_database(db_path: Path) -> List[Session]:
+    """
+    Connect to SQLite database at db_path.
+    Query the threads table.
+    For each row, extract session metadata (id, created_at, updated_at, working_directory,
+    tokens_used, cli_version, source, approval_mode, rollout_path).
+    If model field is NULL, resolve via extract_model_from_rollout() using the rollout_path from the row.
+    Call count_user_messages_in_rollout() to populate user_message_count.
+    Extract first_user_message from the rollout file.
+    Return a list of Session objects (with tool="codex").
+    On database error (corrupted, locked, schema mismatch), log a warning and return an empty list.
+    """
+    if not db_path.exists():
+        print(f"Warning: Codex database not found at {db_path}", file=sys.stderr)
+        return []
+    
+    sessions: List[Session] = []
+    
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Query threads table
+        cursor.execute("""
+            SELECT id, created_at, updated_at, working_directory, tokens_used, 
+                   model, cli_version, source, approval_mode, rollout_path
+            FROM threads
+        """)
+        
+        for row in cursor.fetchall():
+            session_id = row["id"]
+            created_at_str = row["created_at"]
+            updated_at_str = row["updated_at"]
+            working_directory = row["working_directory"]
+            tokens_used = row["tokens_used"] or 0
+            model = row["model"]
+            cli_version = row["cli_version"]
+            source = row["source"]
+            approval_mode = row["approval_mode"]
+            rollout_path_str = row["rollout_path"]
+            
+            # Parse timestamps
+            try:
+                start_time = _parse_iso_z(created_at_str)
+                end_time = _parse_iso_z(updated_at_str)
+            except (ValueError, TypeError):
+                print(f"Warning: invalid timestamps for Codex session {session_id}", file=sys.stderr)
+                continue
+            
+            # Resolve model if NULL
+            if rollout_path_str:
+                # rollout_path may be absolute or relative to the database directory
+                rollout_path = Path(rollout_path_str)
+                if not rollout_path.is_absolute():
+                    rollout_path = db_path.parent / rollout_path
+            else:
+                rollout_path = None
+            
+            if not model and rollout_path:
+                model = extract_model_from_rollout(rollout_path)
+            
+            # Count user messages
+            user_message_count = 0
+            first_user_message = ""
+            if rollout_path:
+                user_message_count = count_user_messages_in_rollout(rollout_path)
+                first_user_message = extract_first_user_message_from_rollout(rollout_path)
+            
+            # Build a minimal message list for compatibility
+            # We create placeholder messages to satisfy the Session dataclass
+            duration_seconds = (end_time - start_time).total_seconds()
+            
+            # Create messages based on user_message_count
+            messages: List[Message] = []
+            if user_message_count > 0 and first_user_message:
+                # Add first user message
+                messages.append(Message(timestamp=start_time, role="user", content=first_user_message))
+                # Add placeholder for remaining messages
+                for i in range(1, user_message_count):
+                    # Distribute messages evenly across the session duration
+                    msg_time = start_time + timedelta(seconds=(duration_seconds * i / user_message_count))
+                    messages.append(Message(timestamp=msg_time, role="user", content=""))
+            
+            # Compute inter-message gaps
+            user_msgs = [m for m in messages if m.role == "user"]
+            gaps = compute_inter_message_gaps(user_msgs)
+            
+            # Create Session object
+            session = Session(
+                session_id=session_id,
+                tool="codex",
+                project_path=working_directory,
+                start_time=start_time,
+                end_time=end_time,
+                duration_seconds=duration_seconds,
+                messages=messages,
+                message_count=user_message_count,
+                model=model,
+                mode=approval_mode,
+                input_tokens=None,  # Codex only provides total tokens
+                output_tokens=None,
+                tool_call_count=0,  # Not available in Codex database
+                inter_message_gaps=gaps,
+                character_approximate=True,  # No tool_call data available
+            )
+            
+            # Apply categorization and character classification
+            char, approx = classify_session_character(session)
+            session.session_character = char
+            session.character_approximate = approx
+            session.category = categorize_session(session)
+            
+            sessions.append(session)
+        
+        conn.close()
+        
+    except sqlite3.Error as exc:
+        print(f"Warning: cannot read Codex database at {db_path}: {exc}", file=sys.stderr)
+        return []
+    except Exception as exc:
+        print(f"Warning: unexpected error parsing Codex database: {exc}", file=sys.stderr)
+        return []
+    
     return sessions
 
 
@@ -2649,11 +2929,27 @@ def main() -> None:
     print(f"{len(cli_sessions)} sessions found", file=sys.stderr)
     all_sessions.extend(cli_sessions)
 
+    # --- Codex ---
+    print(f"Scanning Codex history: {CODEX_HOME_DIR} ...", end=" ", flush=True, file=sys.stderr)
+    try:
+        db_path = discover_codex_database()
+        if db_path:
+            codex_sessions = parse_codex_database(db_path)
+            if cutoff:
+                codex_sessions = [s for s in codex_sessions if s.start_time >= cutoff]
+            print(f"{len(codex_sessions)} sessions found", file=sys.stderr)
+            all_sessions.extend(codex_sessions)
+        else:
+            print("database not found, skipping", file=sys.stderr)
+    except Exception as exc:
+        print(f"\nWarning: {exc}", file=sys.stderr)
+
     if not all_sessions:
         print("\nNo chat history found. Checked:", file=sys.stderr)
         print(f"  Claude Code:     {os.path.expanduser(args.claude_dir)}", file=sys.stderr)
         print(f"  Copilot VS Code: {os.path.expanduser(args.vscode_dir)}", file=sys.stderr)
         print(f"  Copilot CLI:     {os.path.expanduser(args.copilot_cli_dir)}", file=sys.stderr)
+        print(f"  Codex:           {CODEX_HOME_DIR}", file=sys.stderr)
         sys.exit(1)
 
     report = build_report(all_sessions)
