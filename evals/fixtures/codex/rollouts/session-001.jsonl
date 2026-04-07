@@ -1,0 +1,18 @@
+{"type": "session_meta", "session_id": "uuid-001", "timestamp": "2026-03-01T10:00:00Z"}
+{"type": "turn_context", "model": "claude-opus-4.6", "turn": 0}
+{"type": "response_item", "role": "user", "content": "Debug the API timeout"}
+{"type": "response_item", "role": "assistant", "content": "I'll help debug the API timeout issue."}
+{"type": "response_item", "role": "user", "content": "Check the connection pool settings"}
+{"type": "response_item", "role": "assistant", "content": "Looking at connection pool settings now."}
+{"type": "response_item", "role": "user", "content": "What's the current timeout value?"}
+{"type": "response_item", "role": "assistant", "content": "Current timeout is 30 seconds."}
+{"type": "response_item", "role": "user", "content": "Increase it to 60 seconds"}
+{"type": "response_item", "role": "assistant", "content": "Updated timeout to 60 seconds."}
+{"type": "response_item", "role": "user", "content": "Test the API endpoint"}
+{"type": "response_item", "role": "assistant", "content": "Testing endpoint now."}
+{"type": "response_item", "role": "user", "content": "Check error logs"}
+{"type": "response_item", "role": "assistant", "content": "Checking logs for errors."}
+{"type": "response_item", "role": "user", "content": "Add retry logic"}
+{"type": "response_item", "role": "assistant", "content": "Added exponential backoff retry logic."}
+{"type": "response_item", "role": "user", "content": "Run integration tests"}
+{"type": "response_item", "role": "assistant", "content": "All integration tests passing."}

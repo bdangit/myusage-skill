@@ -1,0 +1,10 @@
+{"type": "session_meta", "session_id": "uuid-003", "timestamp": "2026-03-03T08:00:00Z"}
+{"type": "turn_context", "model": "claude-haiku-4.5", "turn": 0}
+{"type": "response_item", "role": "user", "content": "Plan the refactor"}
+{"type": "response_item", "role": "assistant", "content": "I'll create a refactoring plan."}
+{"type": "response_item", "role": "user", "content": "Identify code smells"}
+{"type": "response_item", "role": "assistant", "content": "Found duplicate code and long methods."}
+{"type": "response_item", "role": "user", "content": "Suggest improvements"}
+{"type": "response_item", "role": "assistant", "content": "Extract methods and use composition."}
+{"type": "response_item", "role": "user", "content": "Create task list"}
+{"type": "response_item", "role": "assistant", "content": "Task list created with 12 items."}
