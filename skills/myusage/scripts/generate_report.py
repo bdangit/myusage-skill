@@ -78,6 +78,8 @@ class Session:
     model_token_totals: Optional[Dict[str, Dict[str, int]]] = None
     effective_prus: Optional[float] = None
     estimated_cost_usd: Optional[float] = None
+    cost_breakdown_available: bool = True  # False for Codex (only total tokens available)
+    total_tokens: Optional[int] = None  # Used by Codex (combined input+output)
 
 
 @dataclass
@@ -886,13 +888,15 @@ def parse_codex_database(db_path: Path) -> List[Session]:
                 tool_call_count=0,  # Not available in Codex database
                 inter_message_gaps=gaps,
                 character_approximate=True,  # No tool_call data available
+                cost_breakdown_available=False,  # Codex only has total tokens, no input/output split
+                total_tokens=tokens_used if tokens_used > 0 else None,  # Combined token count from Codex
             )
             
             # Apply categorization and character classification
             char, approx = classify_session_character(session)
             session.session_character = char
             session.character_approximate = approx
-            session.category = categorize_session(session)
+            session.category = categorize_codex_session(session)
             
             sessions.append(session)
         
@@ -1038,6 +1042,41 @@ def categorize_session(session: Session) -> str:
             best_name = name
             best_priority = priority
 
+    return best_name
+
+
+def categorize_codex_session(session: Session) -> str:
+    """
+    Categorize a Codex session using its first user message.
+    Codex sessions have a first_user_message extracted from the rollout.
+    This function uses keyword scoring on the first message content.
+    If no real user content, return "Other".
+    """
+    # Extract first user message from the Codex session messages
+    first_user_msg = None
+    for m in session.messages:
+        if m.role == "user" and m.content and not _is_system_message(m.content):
+            first_user_msg = m.content
+            break
+    
+    if not first_user_msg:
+        return "Other"
+    
+    user_text = first_user_msg.lower()
+    
+    best_name = "Other"
+    best_score = 0
+    best_priority = 999
+    
+    for name, priority, keywords in CATEGORY_RULES:
+        if not keywords:
+            continue
+        score = sum(user_text.count(kw) for kw in keywords)
+        if score > best_score or (score == best_score and score > 0 and priority < best_priority):
+            best_score = score
+            best_name = name
+            best_priority = priority
+    
     return best_name
 
 
@@ -1424,12 +1463,14 @@ TOOL_LABELS = {
     "claude_code": "Claude Code",
     "copilot_vscode": "Copilot VS Code",
     "copilot_cli": "Copilot CLI",
+    "codex": "Codex",
 }
 
 ACCENT_COLORS = {
     "claude_code": "#8b5cf6",   # purple
     "copilot_vscode": "#3b82f6",  # blue
     "copilot_cli": "#10b981",   # green
+    "codex": "#ef4444",        # red
 }
 
 CATEGORY_COLORS = {
@@ -1674,6 +1715,31 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     has_costs = any(v is not None for v in tool_cost.values())
     has_prus = any(v is not None for v in tool_prus.values())
 
+    # --- Per-tool token display (accounting for Codex limitations) ---
+    # Build display strings for input/output tokens per tool
+    tool_input_display: Dict[str, str] = {}
+    tool_output_display: Dict[str, str] = {}
+    has_codex_tokens = False
+    for t in tool_names:
+        snap = report.snapshots[t]
+        if snap.total_input_tokens is not None and snap.total_output_tokens is not None:
+            # Standard case: full breakdown available
+            tool_input_display[t] = f"{snap.total_input_tokens:,}"
+            tool_output_display[t] = f"{snap.total_output_tokens:,}"
+        else:
+            # Check if this tool has any Codex sessions with total_tokens
+            sess_list = snap.sessions
+            codex_total = sum(s.total_tokens for s in sess_list if s.total_tokens is not None and not s.cost_breakdown_available)
+            if codex_total > 0:
+                # Show total tokens for Codex in a combined display, use "—" for breakdown
+                tool_input_display[t] = "—"
+                tool_output_display[t] = f"{codex_total:,}*"
+                has_codex_tokens = True
+            else:
+                # No data available
+                tool_input_display[t] = "—"
+                tool_output_display[t] = "—"
+
     # --- Date range ---
     if all_sessions:
         all_start = min(s.start_time for s in all_sessions)
@@ -1703,6 +1769,11 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
 
     autonomous_pct = round(char_counts["autonomous"] / max(sum(char_counts.values()), 1) * 100)
     engaged_pct = round(char_counts["deeply_engaged"] / max(sum(char_counts.values()), 1) * 100)
+
+    # --- Build cost footnote with Codex notice if applicable ---
+    cost_footnote = 'ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.<br><strong>Claude Code:</strong> (input tokens ÷ 1M × input $/M) + (output tokens ÷ 1M × output $/M) — e.g. Sonnet 4.6 at $3.00/M in · $15.00/M out, Haiku 4.5 at $0.80/M in · $4.00/M out, Opus 4.6 at $15.00/M in · $75.00/M out.<br><strong>Copilot:</strong> requests × per-model PRU multiplier = effective PRUs × $0.04/PRU — e.g. gpt-4o and most Claude models at 1.0×, Opus at 3.0×.'
+    if has_codex_tokens:
+        cost_footnote += '<br><strong>Codex:</strong> Token count is combined (input + output). Input/output breakdown is not available; cells show "—".'
 
     # Build HTML/CSS heatmap grid
     _heatmap_day_colors = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f97316"]
@@ -2456,13 +2527,12 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             <td>{report.snapshots[t].total_messages}</td>
             <td>{round(report.snapshots[t].total_sessions / max(report.total_sessions_all_tools, 1) * 100)}%</td>
             <td style="color:var(--text-muted);font-size:0.8rem">{fmt_date(report.snapshots[t].date_range_start)} → {fmt_date(report.snapshots[t].date_range_end)}</td>
-            {'<td>' + (f"{report.snapshots[t].total_input_tokens:,}" if report.snapshots[t].total_input_tokens is not None else "—") + '</td><td>' + (f"{report.snapshots[t].total_output_tokens:,}" if report.snapshots[t].total_output_tokens is not None else "—") + '</td>' if has_tokens else ''}
+            {'<td>' + tool_input_display[t] + '</td><td>' + tool_output_display[t] + '</td>' if has_tokens else ''}
             {''.join([f'<td>' + (f"{tool_prus[t]:.1f}" if tool_prus[t] is not None else "N/A") + '</td>']) if has_prus else ''}
             {''.join([f'<td title="Estimated at list price; plan allowances may reduce actual cost">' + (f"${tool_cost[t]:.4f}" if tool_cost[t] is not None else "N/A") + '</td>']) if has_costs else ''}
           </tr>""" for t in tool_names)}
-        </tbody>
+       {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">' + cost_footnote + '</p>' if has_costs else ''}
       </table>
-      {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.<br><strong>Claude Code:</strong> (input tokens ÷ 1M × input $/M) + (output tokens ÷ 1M × output $/M) — e.g. Sonnet 4.6 at $3.00/M in · $15.00/M out, Haiku 4.5 at $0.80/M in · $4.00/M out, Opus 4.6 at $15.00/M in · $75.00/M out.<br><strong>Copilot:</strong> requests × per-model PRU multiplier = effective PRUs × $0.04/PRU — e.g. gpt-4o and most Claude models at 1.0×, Opus at 3.0×.</p>' if has_costs else ''}
       {token_html}
     </div>
   </div>
