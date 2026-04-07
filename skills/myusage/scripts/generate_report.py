@@ -744,7 +744,7 @@ def count_user_messages_in_rollout(rollout_path: Path) -> int:
                         if event.get("role") == "user":
                             # Check for non-system text
                             content = event.get("content", "")
-                            if content and not content.startswith("<"):
+                            if content and not _is_system_message(content):
                                 count += 1
                 except json.JSONDecodeError as exc:
                     print(
@@ -778,7 +778,7 @@ def extract_first_user_message_from_rollout(rollout_path: Path) -> str:
                     if event.get("type") == "response_item":
                         if event.get("role") == "user":
                             content = event.get("content", "")
-                            if content and not content.startswith("<"):
+                            if content and not _is_system_message(content):
                                 return content
                 except json.JSONDecodeError:
                     continue
@@ -807,112 +807,115 @@ def parse_codex_database(db_path: Path) -> List[Session]:
     sessions: List[Session] = []
     
     try:
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # Query threads table
-        cursor.execute("""
-            SELECT id, created_at, updated_at, cwd, tokens_used, 
-                   model, cli_version, source, approval_mode, rollout_path
-            FROM threads
-        """)
-        
-        for row in cursor.fetchall():
-            session_id = row["id"]
-            created_at_str = row["created_at"]
-            updated_at_str = row["updated_at"]
-            working_directory = row["cwd"]
-            tokens_used = row["tokens_used"] or 0
-            model = row["model"]
-            cli_version = row["cli_version"]
-            source = row["source"]
-            approval_mode = row["approval_mode"]
-            rollout_path_str = row["rollout_path"]
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
             
-            # Parse timestamps - handle both ISO Z format (string) and Unix timestamps (int)
-            try:
-                if isinstance(created_at_str, int):
-                    start_time = _parse_unix_seconds(created_at_str)
-                else:
-                    start_time = _parse_iso_z(created_at_str)
+            # Query threads table
+            cursor.execute("""
+                SELECT id, created_at, updated_at, cwd, tokens_used, 
+                       model, cli_version, source, approval_mode, rollout_path
+                FROM threads
+            """)
+            
+            for row in cursor.fetchall():
+                session_id = row["id"]
+                created_at_str = row["created_at"]
+                updated_at_str = row["updated_at"]
+                working_directory = row["cwd"]
+                tokens_used = row["tokens_used"] or 0
+                model = row["model"]
+                cli_version = row["cli_version"]
+                source = row["source"]
+                approval_mode = row["approval_mode"]
+                rollout_path_str = row["rollout_path"]
                 
-                if isinstance(updated_at_str, int):
-                    end_time = _parse_unix_seconds(updated_at_str)
+                # Parse timestamps - handle both ISO Z format (string) and Unix timestamps (int)
+                try:
+                    if isinstance(created_at_str, int):
+                        start_time = _parse_unix_seconds(created_at_str)
+                    else:
+                        start_time = _parse_iso_z(created_at_str)
+                    
+                    if isinstance(updated_at_str, int):
+                        end_time = _parse_unix_seconds(updated_at_str)
+                    else:
+                        end_time = _parse_iso_z(updated_at_str)
+                except (ValueError, TypeError):
+                    print(f"Warning: invalid timestamps for Codex session {session_id}", file=sys.stderr)
+                    continue
+                
+                # Resolve model if NULL
+                if rollout_path_str:
+                    # rollout_path may be absolute or relative to the database directory
+                    rollout_path = Path(rollout_path_str)
+                    if not rollout_path.is_absolute():
+                        rollout_path = db_path.parent / rollout_path
                 else:
-                    end_time = _parse_iso_z(updated_at_str)
-            except (ValueError, TypeError):
-                print(f"Warning: invalid timestamps for Codex session {session_id}", file=sys.stderr)
-                continue
-            
-            # Resolve model if NULL
-            if rollout_path_str:
-                # rollout_path may be absolute or relative to the database directory
-                rollout_path = Path(rollout_path_str)
-                if not rollout_path.is_absolute():
-                    rollout_path = db_path.parent / rollout_path
-            else:
-                rollout_path = None
-            
-            if not model and rollout_path:
-                model = extract_model_from_rollout(rollout_path)
-            
-            # Count user messages
-            user_message_count = 0
-            first_user_message = ""
-            if rollout_path:
-                user_message_count = count_user_messages_in_rollout(rollout_path)
-                first_user_message = extract_first_user_message_from_rollout(rollout_path)
-            
-            # Build a minimal message list for compatibility
-            # We create placeholder messages to satisfy the Session dataclass
-            duration_seconds = (end_time - start_time).total_seconds()
-            
-            # Create messages based on user_message_count
-            messages: List[Message] = []
-            if user_message_count > 0 and first_user_message:
-                # Add first user message
-                messages.append(Message(timestamp=start_time, role="user", content=first_user_message))
-                # Add placeholder for remaining messages
-                for i in range(1, user_message_count):
-                    # Distribute messages evenly across the session duration
-                    msg_time = start_time + timedelta(seconds=(duration_seconds * i / user_message_count))
-                    messages.append(Message(timestamp=msg_time, role="user", content=""))
-            
-            # Compute inter-message gaps
-            user_msgs = [m for m in messages if m.role == "user"]
-            gaps = compute_inter_message_gaps(user_msgs)
-            
-            # Create Session object
-            session = Session(
-                session_id=session_id,
-                tool="codex",
-                project_path=working_directory,
-                start_time=start_time,
-                end_time=end_time,
-                duration_seconds=duration_seconds,
-                messages=messages,
-                message_count=user_message_count,
-                model=model,
-                mode=approval_mode,
-                input_tokens=None,  # Codex only provides total tokens
-                output_tokens=None,
-                tool_call_count=0,  # Not available in Codex database
-                inter_message_gaps=gaps,
-                character_approximate=True,  # No tool_call data available
-                cost_breakdown_available=False,  # Codex only has total tokens, no input/output split
-                total_tokens=tokens_used if tokens_used > 0 else None,  # Combined token count from Codex
-            )
-            
-            # Apply categorization and character classification
-            char, approx = classify_session_character(session)
-            session.session_character = char
-            session.character_approximate = approx
-            session.category = categorize_codex_session(session)
-            
-            sessions.append(session)
-        
-        conn.close()
+                    rollout_path = None
+                
+                if not model and rollout_path:
+                    model = extract_model_from_rollout(rollout_path)
+                
+                # Count user messages
+                user_message_count = 0
+                first_user_message = ""
+                if rollout_path:
+                    user_message_count = count_user_messages_in_rollout(rollout_path)
+                    first_user_message = extract_first_user_message_from_rollout(rollout_path)
+                
+                # Build a minimal message list for compatibility
+                # We create placeholder messages to satisfy the Session dataclass
+                duration_seconds = (end_time - start_time).total_seconds()
+                
+                # Create messages based on user_message_count
+                messages: List[Message] = []
+                if user_message_count > 0:
+                    # Add first user message if available
+                    if first_user_message:
+                        messages.append(Message(timestamp=start_time, role="user", content=first_user_message))
+                    else:
+                        # Create placeholder with empty content to maintain count
+                        messages.append(Message(timestamp=start_time, role="user", content=""))
+                    
+                    # Add placeholders for remaining messages
+                    for i in range(1, user_message_count):
+                        # Distribute messages evenly across the session duration
+                        msg_time = start_time + timedelta(seconds=(duration_seconds * i / user_message_count))
+                        messages.append(Message(timestamp=msg_time, role="user", content=""))
+                
+                # Compute inter-message gaps
+                user_msgs = [m for m in messages if m.role == "user"]
+                gaps = compute_inter_message_gaps(user_msgs)
+                
+                # Create Session object
+                session = Session(
+                    session_id=session_id,
+                    tool="codex",
+                    project_path=working_directory,
+                    start_time=start_time,
+                    end_time=end_time,
+                    duration_seconds=duration_seconds,
+                    messages=messages,
+                    message_count=user_message_count,
+                    model=model,
+                    mode=approval_mode,
+                    input_tokens=None,  # Codex only provides total tokens
+                    output_tokens=None,
+                    tool_call_count=0,  # Not available in Codex database
+                    inter_message_gaps=gaps,
+                    character_approximate=True,  # No tool_call data available
+                    cost_breakdown_available=False,  # Codex only has total tokens, no input/output split
+                    total_tokens=tokens_used if tokens_used > 0 else None,  # Combined token count from Codex
+                )
+                
+                # Apply categorization and character classification
+                char, approx = classify_session_character(session)
+                session.session_character = char
+                session.character_approximate = approx
+                session.category = categorize_codex_session(session)
+                
+                sessions.append(session)
         
     except sqlite3.Error as exc:
         print(f"Warning: cannot read Codex database at {db_path}: {exc}", file=sys.stderr)
@@ -1713,7 +1716,12 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         snap.total_output_tokens for snap in report.snapshots.values()
         if snap.total_output_tokens is not None
     )
-    has_tokens = total_input > 0 or total_output > 0
+    # Check for Codex combined tokens as well
+    total_codex_tokens = sum(
+        sum(s.total_tokens for s in snap.sessions if s.total_tokens is not None and not s.cost_breakdown_available)
+        for snap in report.snapshots.values()
+    )
+    has_tokens = total_input > 0 or total_output > 0 or total_codex_tokens > 0
 
     # --- Cost data ---
     tool_cost: Dict[str, Optional[float]] = {}
