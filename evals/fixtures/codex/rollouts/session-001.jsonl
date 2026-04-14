@@ -1,0 +1,25 @@
+{"timestamp": "2026-03-01T10:00:00Z", "type": "session_meta", "payload": {"id": "uuid-001", "timestamp": "2026-03-01T10:00:00Z", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:00:01Z", "type": "turn_context", "payload": {"turn_id": "turn-001-1", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:00:02Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Debug the API timeout"}}
+{"timestamp": "2026-03-01T10:00:03Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "I'll help debug the API timeout issue."}]}}
+{"timestamp": "2026-03-01T10:01:00Z", "type": "turn_context", "payload": {"turn_id": "turn-001-2", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:01:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Check the connection pool settings"}}
+{"timestamp": "2026-03-01T10:01:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Looking at connection pool settings now."}]}}
+{"timestamp": "2026-03-01T10:02:00Z", "type": "turn_context", "payload": {"turn_id": "turn-001-3", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:02:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "What's the current timeout value?"}}
+{"timestamp": "2026-03-01T10:02:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Current timeout is 30 seconds."}]}}
+{"timestamp": "2026-03-01T10:03:00Z", "type": "turn_context", "payload": {"turn_id": "turn-001-4", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:03:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Increase it to 60 seconds"}}
+{"timestamp": "2026-03-01T10:03:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Updated timeout to 60 seconds."}]}}
+{"timestamp": "2026-03-01T10:04:00Z", "type": "turn_context", "payload": {"turn_id": "turn-001-5", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:04:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Test the API endpoint"}}
+{"timestamp": "2026-03-01T10:04:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Testing endpoint now."}]}}
+{"timestamp": "2026-03-01T10:05:00Z", "type": "turn_context", "payload": {"turn_id": "turn-001-6", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:05:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Check error logs"}}
+{"timestamp": "2026-03-01T10:05:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Checking logs for errors."}]}}
+{"timestamp": "2026-03-01T10:06:00Z", "type": "turn_context", "payload": {"turn_id": "turn-001-7", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:06:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Add retry logic"}}
+{"timestamp": "2026-03-01T10:06:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Added exponential backoff retry logic."}]}}
+{"timestamp": "2026-03-01T10:07:00Z", "type": "turn_context", "payload": {"turn_id": "turn-001-8", "model": "claude-opus-4.6", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-01T10:07:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Run integration tests"}}
+{"timestamp": "2026-03-01T10:07:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "All integration tests passing."}]}}

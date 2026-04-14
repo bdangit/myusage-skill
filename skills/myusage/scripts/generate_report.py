@@ -28,6 +28,16 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import urllib.request
 import urllib.error
+import sqlite3
+
+
+# ---------------------------------------------------------------------------
+# Platform Constants
+# ---------------------------------------------------------------------------
+
+# Codex session database location — highest version number takes precedence
+CODEX_HOME_DIR = Path.home() / ".codex"
+CODEX_DB_PATTERN = "state_*.sqlite"
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +78,8 @@ class Session:
     model_token_totals: Optional[Dict[str, Dict[str, int]]] = None
     effective_prus: Optional[float] = None
     estimated_cost_usd: Optional[float] = None
+    cost_breakdown_available: bool = True  # False for Codex (only total tokens available)
+    total_tokens: Optional[int] = None  # Used by Codex (combined input+output)
 
 
 @dataclass
@@ -140,6 +152,11 @@ def _parse_iso_z(ts: str) -> datetime:
 def _parse_unix_ms(ms: int) -> datetime:
     """Parse Unix millisecond timestamp to UTC-aware datetime."""
     return datetime.fromtimestamp(ms / 1000.0, tz=timezone.utc)
+
+
+def _parse_unix_seconds(seconds: int) -> datetime:
+    """Parse Unix second timestamp to UTC-aware datetime."""
+    return datetime.fromtimestamp(seconds, tz=timezone.utc)
 
 
 def _map_permission_mode(pm: Optional[str]) -> str:
@@ -230,6 +247,17 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
                 msg_obj = entry.get("message", {})
                 content_raw = msg_obj.get("content", "")
                 if isinstance(content_raw, list):
+                    # Skip entries that are purely tool_result blocks — these are
+                    # tool responses fed back to the model, not real human messages.
+                    block_types = {
+                        block.get("type")
+                        for block in content_raw
+                        if isinstance(block, dict)
+                    }
+                    if block_types and block_types <= {"tool_result"}:
+                        if not project_path:
+                            project_path = entry.get("cwd")
+                        continue
                     parts = []
                     for block in content_raw:
                         if isinstance(block, dict):
@@ -510,6 +538,8 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
         tool_call_count = 0
         messages: List[Message] = []
         model_request_counts: Dict[str, int] = {}
+        total_pru: float = 0.0
+        has_pru_data = False
 
         for ev in events:
             ev_type = ev.get("type", "")
@@ -533,6 +563,15 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
                 ts_str = data.get("endTime") or ev.get("endTime") or data.get("sessionStartTime") or ev.get("sessionStartTime")
                 # Try to get end time from model metrics or just use last known
                 # We'll derive end_time from last message timestamp
+                pru_val = data.get("totalPremiumRequests")
+                if pru_val is None:
+                    pru_val = ev.get("totalPremiumRequests")
+                if pru_val is not None:
+                    try:
+                        total_pru = float(pru_val)
+                        has_pru_data = True
+                    except (TypeError, ValueError):
+                        pass
 
             elif ev_type == "session.mode_changed":
                 new_mode = data.get("newMode") or ev.get("newMode")
@@ -618,6 +657,7 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
             inter_message_gaps=gaps,
             character_approximate=False,
             model_request_counts=model_request_counts if model_request_counts else None,
+            effective_prus=total_pru if has_pru_data else None,
         )
         char, approx = classify_session_character(session)
         session.session_character = char
@@ -625,6 +665,290 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
         session.category = categorize_session(session)
         sessions.append(session)
 
+    return sessions
+
+
+# ---------------------------------------------------------------------------
+# Parser: Codex
+# ---------------------------------------------------------------------------
+
+def discover_codex_database() -> Optional[Path]:
+    """
+    Search ~/.codex/ for files matching state_*.sqlite.
+    Return the highest-numbered version (e.g., prefer state_5.sqlite over state_4.sqlite).
+    Return None if no database files found.
+    On error (permission denied, etc.), log a warning to stderr and return None.
+    """
+    if not CODEX_HOME_DIR.exists():
+        return None
+    
+    try:
+        db_files = list(CODEX_HOME_DIR.glob(CODEX_DB_PATTERN))
+        if not db_files:
+            return None
+        
+        # Extract version numbers and sort
+        def extract_version(p: Path) -> int:
+            try:
+                # state_5.sqlite -> 5
+                stem = p.stem  # "state_5"
+                parts = stem.split("_")
+                if len(parts) == 2 and parts[0] == "state":
+                    return int(parts[1])
+                return 0
+            except (ValueError, IndexError):
+                return 0
+        
+        db_files.sort(key=extract_version, reverse=True)
+        return db_files[0]
+    
+    except (OSError, PermissionError) as exc:
+        print(f"Warning: cannot access Codex database directory: {exc}", file=sys.stderr)
+        return None
+
+
+def extract_model_from_rollout(rollout_path: Path) -> Optional[str]:
+    """
+    Open the JSONL file at rollout_path.
+    Iterate through lines (one JSON object per line).
+    Find the first turn_context event.
+    Extract and return the model field from its payload.
+    If not found or file is missing/corrupted, log a warning and return None.
+    Handle exceptions gracefully (return None on parse errors).
+    """
+    if not rollout_path.exists():
+        return None
+    
+    try:
+        with open(rollout_path, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "turn_context":
+                        model = event.get("payload", {}).get("model")
+                        if model:
+                            return model
+                except json.JSONDecodeError as exc:
+                    print(
+                        f"Warning: skipping malformed JSON in {rollout_path} line {lineno}: {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
+        return None
+    except OSError as exc:
+        print(f"Warning: cannot read rollout file {rollout_path}: {exc}", file=sys.stderr)
+        return None
+
+
+def count_user_messages_in_rollout(rollout_path: Path) -> int:
+    """
+    Open the JSONL file at rollout_path.
+    Iterate through lines.
+    Count event_msg events where payload.type == "user_message" and payload.message is non-empty.
+    Return the count (default to 0 if file missing or corrupted).
+    Log warnings on parse errors but do not raise.
+    """
+    if not rollout_path.exists():
+        return 0
+    
+    count = 0
+    try:
+        with open(rollout_path, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "event_msg":
+                        payload = event.get("payload", {})
+                        if payload.get("type") == "user_message":
+                            message = payload.get("message", "")
+                            if message and message.strip():
+                                count += 1
+                except json.JSONDecodeError as exc:
+                    print(
+                        f"Warning: skipping malformed JSON in {rollout_path} line {lineno}: {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
+    except OSError as exc:
+        print(f"Warning: cannot read rollout file {rollout_path}: {exc}", file=sys.stderr)
+        return 0
+    
+    return count
+
+
+def extract_first_user_message_from_rollout(rollout_path: Path) -> str:
+    """
+    Extract the first user message from the rollout file for categorization.
+    Looks for event_msg events with payload.type == "user_message".
+    Return empty string if not found.
+    """
+    if not rollout_path.exists():
+        return ""
+    
+    try:
+        with open(rollout_path, "r", encoding="utf-8") as fh:
+            for lineno, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "event_msg":
+                        payload = event.get("payload", {})
+                        if payload.get("type") == "user_message":
+                            message = payload.get("message", "")
+                            if message and message.strip():
+                                return message
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        pass
+    
+    return ""
+
+
+def parse_codex_database(db_path: Path) -> List[Session]:
+    """
+    Connect to SQLite database at db_path.
+    Query the threads table.
+    For each row, extract session metadata (id, created_at, updated_at, cwd,
+    tokens_used, cli_version, source, approval_mode, rollout_path).
+    If model field is NULL, resolve via extract_model_from_rollout() using the rollout_path from the row.
+    Call count_user_messages_in_rollout() to populate user_message_count.
+    Extract first_user_message from the rollout file.
+    Return a list of Session objects (with tool="codex").
+    On database error (corrupted, locked, schema mismatch), log a warning and return an empty list.
+    """
+    if not db_path.exists():
+        print(f"Warning: Codex database not found at {db_path}", file=sys.stderr)
+        return []
+    
+    sessions: List[Session] = []
+    
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Query threads table
+            cursor.execute("""
+                SELECT id, created_at, updated_at, cwd, tokens_used, 
+                       model, cli_version, source, approval_mode, rollout_path
+                FROM threads
+            """)
+            
+            for row in cursor.fetchall():
+                session_id = row["id"]
+                created_at_str = row["created_at"]
+                updated_at_str = row["updated_at"]
+                working_directory = row["cwd"]
+                tokens_used = row["tokens_used"] or 0
+                model = row["model"]
+                cli_version = row["cli_version"]
+                source = row["source"]
+                approval_mode = row["approval_mode"]
+                rollout_path_str = row["rollout_path"]
+                
+                # Parse timestamps - handle both ISO Z format (string) and Unix timestamps (int)
+                try:
+                    if isinstance(created_at_str, int):
+                        start_time = _parse_unix_seconds(created_at_str)
+                    else:
+                        start_time = _parse_iso_z(created_at_str)
+                    
+                    if isinstance(updated_at_str, int):
+                        end_time = _parse_unix_seconds(updated_at_str)
+                    else:
+                        end_time = _parse_iso_z(updated_at_str)
+                except (ValueError, TypeError):
+                    print(f"Warning: invalid timestamps for Codex session {session_id}", file=sys.stderr)
+                    continue
+                
+                # Resolve model if NULL
+                if rollout_path_str:
+                    # rollout_path may be absolute or relative to the database directory
+                    rollout_path = Path(rollout_path_str)
+                    if not rollout_path.is_absolute():
+                        rollout_path = db_path.parent / rollout_path
+                else:
+                    rollout_path = None
+                
+                if not model and rollout_path:
+                    model = extract_model_from_rollout(rollout_path)
+                
+                # Count user messages
+                user_message_count = 0
+                first_user_message = ""
+                if rollout_path:
+                    user_message_count = count_user_messages_in_rollout(rollout_path)
+                    first_user_message = extract_first_user_message_from_rollout(rollout_path)
+                
+                # Build a minimal message list for compatibility
+                # We create placeholder messages to satisfy the Session dataclass
+                duration_seconds = (end_time - start_time).total_seconds()
+                
+                # Create messages based on user_message_count
+                messages: List[Message] = []
+                if user_message_count > 0:
+                    # Add first user message if available
+                    if first_user_message:
+                        messages.append(Message(timestamp=start_time, role="user", content=first_user_message))
+                    else:
+                        # Create placeholder with empty content to maintain count
+                        messages.append(Message(timestamp=start_time, role="user", content=""))
+                    
+                    # Add placeholders for remaining messages
+                    for i in range(1, user_message_count):
+                        # Distribute messages evenly across the session duration
+                        msg_time = start_time + timedelta(seconds=(duration_seconds * i / user_message_count))
+                        messages.append(Message(timestamp=msg_time, role="user", content=""))
+                
+                # Compute inter-message gaps
+                user_msgs = [m for m in messages if m.role == "user"]
+                gaps = compute_inter_message_gaps(user_msgs)
+                
+                # Create Session object
+                session = Session(
+                    session_id=session_id,
+                    tool="codex",
+                    project_path=working_directory,
+                    start_time=start_time,
+                    end_time=end_time,
+                    duration_seconds=duration_seconds,
+                    messages=messages,
+                    message_count=user_message_count,
+                    model=model,
+                    mode=approval_mode,
+                    input_tokens=None,  # Codex only provides total tokens
+                    output_tokens=None,
+                    tool_call_count=0,  # Not available in Codex database
+                    inter_message_gaps=gaps,
+                    character_approximate=True,  # No tool_call data available
+                    cost_breakdown_available=False,  # Codex only has total tokens, no input/output split
+                    total_tokens=tokens_used if tokens_used > 0 else None,  # Combined token count from Codex
+                )
+                
+                # Apply categorization and character classification
+                char, approx = classify_session_character(session)
+                session.session_character = char
+                session.character_approximate = approx
+                session.category = categorize_codex_session(session)
+                
+                sessions.append(session)
+        
+    except sqlite3.Error as exc:
+        print(f"Warning: cannot read Codex database at {db_path}: {exc}", file=sys.stderr)
+        return []
+    except Exception as exc:
+        print(f"Warning: unexpected error parsing Codex database: {exc}", file=sys.stderr)
+        return []
+    
     return sessions
 
 
@@ -761,6 +1085,41 @@ def categorize_session(session: Session) -> str:
     return best_name
 
 
+def categorize_codex_session(session: Session) -> str:
+    """
+    Categorize a Codex session using its first user message.
+    Codex sessions have a first_user_message extracted from the rollout.
+    This function uses keyword scoring on the first message content.
+    If no real user content, return "Other".
+    """
+    # Extract first user message from the Codex session messages
+    first_user_msg = None
+    for m in session.messages:
+        if m.role == "user" and m.content and not _is_system_message(m.content):
+            first_user_msg = m.content
+            break
+    
+    if not first_user_msg:
+        return "Other"
+    
+    user_text = first_user_msg.lower()
+    
+    best_name = "Other"
+    best_score = 0
+    best_priority = 999
+    
+    for name, priority, keywords in CATEGORY_RULES:
+        if not keywords:
+            continue
+        score = sum(user_text.count(kw) for kw in keywords)
+        if score > best_score or (score == best_score and score > 0 and priority < best_priority):
+            best_score = score
+            best_name = name
+            best_priority = priority
+    
+    return best_name
+
+
 def compute_inter_message_gaps(user_messages: List[Message]) -> List[float]:
     """Sort user messages by timestamp, compute consecutive differences in seconds."""
     if len(user_messages) < 2:
@@ -869,6 +1228,7 @@ def build_report(all_sessions: List[Session]) -> InsightsReport:
 def compute_session_costs(sessions: List[Session]) -> None:
     """Mutate sessions in-place to set effective_prus and estimated_cost_usd."""
     for s in sessions:
+        parsed_prus = s.effective_prus  # preserve what the parser set from shutdown events
         s.effective_prus = None
         s.estimated_cost_usd = None
 
@@ -882,10 +1242,15 @@ def compute_session_costs(sessions: List[Session]) -> None:
                 counts = {}
 
             if not counts:
-                print(
-                    f"Warning: no model data for session '{s.session_id}'; cost unknown",
-                    file=sys.stderr,
-                )
+                # Fall back to pre-parsed PRU value if available (e.g., from session.shutdown totalPremiumRequests)
+                if parsed_prus is not None:
+                    s.effective_prus = parsed_prus
+                    s.estimated_cost_usd = parsed_prus * PRU_UNIT_PRICE_USD
+                else:
+                    print(
+                        f"Warning: no model data for session '{s.session_id}'; cost unknown",
+                        file=sys.stderr,
+                    )
                 continue
 
             total_prus = 0.0
@@ -1144,12 +1509,14 @@ TOOL_LABELS = {
     "claude_code": "Claude Code",
     "copilot_vscode": "Copilot VS Code",
     "copilot_cli": "Copilot CLI",
+    "codex": "Codex",
 }
 
 ACCENT_COLORS = {
     "claude_code": "#8b5cf6",   # purple
     "copilot_vscode": "#3b82f6",  # blue
     "copilot_cli": "#10b981",   # green
+    "codex": "#ef4444",        # red
 }
 
 CATEGORY_COLORS = {
@@ -1380,7 +1747,12 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         snap.total_output_tokens for snap in report.snapshots.values()
         if snap.total_output_tokens is not None
     )
-    has_tokens = total_input > 0 or total_output > 0
+    # Check for Codex combined tokens as well
+    total_codex_tokens = sum(
+        sum(s.total_tokens for s in snap.sessions if s.total_tokens is not None and not s.cost_breakdown_available)
+        for snap in report.snapshots.values()
+    )
+    has_tokens = total_input > 0 or total_output > 0 or total_codex_tokens > 0
 
     # --- Cost data ---
     tool_cost: Dict[str, Optional[float]] = {}
@@ -1393,6 +1765,32 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
         tool_prus[t] = round(sum(prus), 2) if prus else None
     has_costs = any(v is not None for v in tool_cost.values())
     has_prus = any(v is not None for v in tool_prus.values())
+
+    # --- Per-tool token display (accounting for Codex limitations) ---
+    # Build display strings for input/output tokens per tool
+    tool_input_display: Dict[str, str] = {}
+    tool_output_display: Dict[str, str] = {}
+    has_codex_tokens = False
+    for t in tool_names:
+        snap = report.snapshots[t]
+        if snap.total_input_tokens is not None and snap.total_output_tokens is not None:
+            # Standard case: full breakdown available
+            tool_input_display[t] = f"{snap.total_input_tokens:,}"
+            tool_output_display[t] = f"{snap.total_output_tokens:,}"
+        else:
+            # Check if this tool has any Codex sessions with total_tokens
+            sess_list = snap.sessions
+            codex_total = sum(s.total_tokens for s in sess_list if s.total_tokens is not None and not s.cost_breakdown_available)
+            if codex_total > 0:
+                # Codex only exposes a combined token total (no input/output split).
+                # Show it in the input column so it isn't mistaken for output-only.
+                tool_input_display[t] = f"{codex_total:,}*"
+                tool_output_display[t] = "—"
+                has_codex_tokens = True
+            else:
+                # No data available
+                tool_input_display[t] = "—"
+                tool_output_display[t] = "—"
 
     # --- Date range ---
     if all_sessions:
@@ -1423,6 +1821,11 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
 
     autonomous_pct = round(char_counts["autonomous"] / max(sum(char_counts.values()), 1) * 100)
     engaged_pct = round(char_counts["deeply_engaged"] / max(sum(char_counts.values()), 1) * 100)
+
+    # --- Build cost footnote with Codex notice if applicable ---
+    cost_footnote = 'ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.<br><strong>Claude Code:</strong> (input tokens ÷ 1M × input $/M) + (output tokens ÷ 1M × output $/M) — e.g. Sonnet 4.6 at $3.00/M in · $15.00/M out, Haiku 4.5 at $0.80/M in · $4.00/M out, Opus 4.6 at $15.00/M in · $75.00/M out.<br><strong>Copilot:</strong> requests × per-model PRU multiplier = effective PRUs × $0.04/PRU — e.g. gpt-4o and most Claude models at 1.0×, Opus at 3.0×.'
+    if has_codex_tokens:
+        cost_footnote += '<br><strong>Codex:</strong> Token count is combined (input + output) from the Codex database — individual input/output breakdown unavailable. Combined total shown in the Input column; Output shows "—".'
 
     # Build HTML/CSS heatmap grid
     _heatmap_day_colors = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f97316"]
@@ -2176,13 +2579,13 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             <td>{report.snapshots[t].total_messages}</td>
             <td>{round(report.snapshots[t].total_sessions / max(report.total_sessions_all_tools, 1) * 100)}%</td>
             <td style="color:var(--text-muted);font-size:0.8rem">{fmt_date(report.snapshots[t].date_range_start)} → {fmt_date(report.snapshots[t].date_range_end)}</td>
-            {'<td>' + (f"{report.snapshots[t].total_input_tokens:,}" if report.snapshots[t].total_input_tokens is not None else "—") + '</td><td>' + (f"{report.snapshots[t].total_output_tokens:,}" if report.snapshots[t].total_output_tokens is not None else "—") + '</td>' if has_tokens else ''}
+            {'<td>' + tool_input_display[t] + '</td><td>' + tool_output_display[t] + '</td>' if has_tokens else ''}
             {''.join([f'<td>' + (f"{tool_prus[t]:.1f}" if tool_prus[t] is not None else "N/A") + '</td>']) if has_prus else ''}
             {''.join([f'<td title="Estimated at list price; plan allowances may reduce actual cost">' + (f"${tool_cost[t]:.4f}" if tool_cost[t] is not None else "N/A") + '</td>']) if has_costs else ''}
           </tr>""" for t in tool_names)}
         </tbody>
       </table>
-      {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.<br><strong>Claude Code:</strong> (input tokens ÷ 1M × input $/M) + (output tokens ÷ 1M × output $/M) — e.g. Sonnet 4.6 at $3.00/M in · $15.00/M out, Haiku 4.5 at $0.80/M in · $4.00/M out, Opus 4.6 at $15.00/M in · $75.00/M out.<br><strong>Copilot:</strong> requests × per-model PRU multiplier = effective PRUs × $0.04/PRU — e.g. gpt-4o and most Claude models at 1.0×, Opus at 3.0×.</p>' if has_costs else ''}
+      {'<p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">' + cost_footnote + '</p>' if has_costs else ''}
       {token_html}
     </div>
   </div>
@@ -2649,11 +3052,27 @@ def main() -> None:
     print(f"{len(cli_sessions)} sessions found", file=sys.stderr)
     all_sessions.extend(cli_sessions)
 
+    # --- Codex ---
+    print(f"Scanning Codex history: {CODEX_HOME_DIR} ...", end=" ", flush=True, file=sys.stderr)
+    try:
+        db_path = discover_codex_database()
+        if db_path:
+            codex_sessions = parse_codex_database(db_path)
+            if cutoff:
+                codex_sessions = [s for s in codex_sessions if s.start_time >= cutoff]
+            print(f"{len(codex_sessions)} sessions found", file=sys.stderr)
+            all_sessions.extend(codex_sessions)
+        else:
+            print("database not found, skipping", file=sys.stderr)
+    except Exception as exc:
+        print(f"\nWarning: {exc}", file=sys.stderr)
+
     if not all_sessions:
         print("\nNo chat history found. Checked:", file=sys.stderr)
         print(f"  Claude Code:     {os.path.expanduser(args.claude_dir)}", file=sys.stderr)
         print(f"  Copilot VS Code: {os.path.expanduser(args.vscode_dir)}", file=sys.stderr)
         print(f"  Copilot CLI:     {os.path.expanduser(args.copilot_cli_dir)}", file=sys.stderr)
+        print(f"  Codex:           {CODEX_HOME_DIR}", file=sys.stderr)
         sys.exit(1)
 
     report = build_report(all_sessions)

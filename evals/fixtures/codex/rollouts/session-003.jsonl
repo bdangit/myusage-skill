@@ -1,0 +1,13 @@
+{"timestamp": "2026-03-03T08:00:00Z", "type": "session_meta", "payload": {"id": "uuid-003", "timestamp": "2026-03-03T08:00:00Z", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-03T08:00:01Z", "type": "turn_context", "payload": {"turn_id": "turn-003-1", "model": "claude-haiku-4.5", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-03T08:00:02Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Plan the refactor"}}
+{"timestamp": "2026-03-03T08:00:03Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "I'll create a refactoring plan."}]}}
+{"timestamp": "2026-03-03T08:01:00Z", "type": "turn_context", "payload": {"turn_id": "turn-003-2", "model": "claude-haiku-4.5", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-03T08:01:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Identify code smells"}}
+{"timestamp": "2026-03-03T08:01:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Found duplicate code and long methods."}]}}
+{"timestamp": "2026-03-03T08:02:00Z", "type": "turn_context", "payload": {"turn_id": "turn-003-3", "model": "claude-haiku-4.5", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-03T08:02:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Suggest improvements"}}
+{"timestamp": "2026-03-03T08:02:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Extract methods and use composition."}]}}
+{"timestamp": "2026-03-03T08:03:00Z", "type": "turn_context", "payload": {"turn_id": "turn-003-4", "model": "claude-haiku-4.5", "cwd": "/Users/bdangit/work/project"}}
+{"timestamp": "2026-03-03T08:03:01Z", "type": "event_msg", "payload": {"type": "user_message", "message": "Create task list"}}
+{"timestamp": "2026-03-03T08:03:02Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "Task list created with 12 items."}]}}
