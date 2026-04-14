@@ -712,7 +712,7 @@ def extract_model_from_rollout(rollout_path: Path) -> Optional[str]:
     Open the JSONL file at rollout_path.
     Iterate through lines (one JSON object per line).
     Find the first turn_context event.
-    Extract and return the model field (or equivalent model name field).
+    Extract and return the model field from its payload.
     If not found or file is missing/corrupted, log a warning and return None.
     Handle exceptions gracefully (return None on parse errors).
     """
@@ -728,7 +728,7 @@ def extract_model_from_rollout(rollout_path: Path) -> Optional[str]:
                 try:
                     event = json.loads(line)
                     if event.get("type") == "turn_context":
-                        model = event.get("model")
+                        model = event.get("payload", {}).get("model")
                         if model:
                             return model
                 except json.JSONDecodeError as exc:
@@ -747,7 +747,7 @@ def count_user_messages_in_rollout(rollout_path: Path) -> int:
     """
     Open the JSONL file at rollout_path.
     Iterate through lines.
-    Count response_item events where role == "user" and message contains non-system text.
+    Count event_msg events where payload.type == "user_message" and payload.message is non-empty.
     Return the count (default to 0 if file missing or corrupted).
     Log warnings on parse errors but do not raise.
     """
@@ -763,11 +763,11 @@ def count_user_messages_in_rollout(rollout_path: Path) -> int:
                     continue
                 try:
                     event = json.loads(line)
-                    if event.get("type") == "response_item":
-                        if event.get("role") == "user":
-                            # Check for non-system text
-                            content = event.get("content", "")
-                            if content and not _is_system_message(content):
+                    if event.get("type") == "event_msg":
+                        payload = event.get("payload", {})
+                        if payload.get("type") == "user_message":
+                            message = payload.get("message", "")
+                            if message and message.strip():
                                 count += 1
                 except json.JSONDecodeError as exc:
                     print(
@@ -785,6 +785,7 @@ def count_user_messages_in_rollout(rollout_path: Path) -> int:
 def extract_first_user_message_from_rollout(rollout_path: Path) -> str:
     """
     Extract the first user message from the rollout file for categorization.
+    Looks for event_msg events with payload.type == "user_message".
     Return empty string if not found.
     """
     if not rollout_path.exists():
@@ -798,11 +799,12 @@ def extract_first_user_message_from_rollout(rollout_path: Path) -> str:
                     continue
                 try:
                     event = json.loads(line)
-                    if event.get("type") == "response_item":
-                        if event.get("role") == "user":
-                            content = event.get("content", "")
-                            if content and not _is_system_message(content):
-                                return content
+                    if event.get("type") == "event_msg":
+                        payload = event.get("payload", {})
+                        if payload.get("type") == "user_message":
+                            message = payload.get("message", "")
+                            if message and message.strip():
+                                return message
                 except json.JSONDecodeError:
                     continue
     except OSError:
