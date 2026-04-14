@@ -1226,6 +1226,7 @@ def build_report(all_sessions: List[Session]) -> InsightsReport:
 def compute_session_costs(sessions: List[Session]) -> None:
     """Mutate sessions in-place to set effective_prus and estimated_cost_usd."""
     for s in sessions:
+        parsed_prus = s.effective_prus  # preserve what the parser set from shutdown events
         s.effective_prus = None
         s.estimated_cost_usd = None
 
@@ -1239,10 +1240,15 @@ def compute_session_costs(sessions: List[Session]) -> None:
                 counts = {}
 
             if not counts:
-                print(
-                    f"Warning: no model data for session '{s.session_id}'; cost unknown",
-                    file=sys.stderr,
-                )
+                # Fall back to pre-parsed PRU value if available (e.g., from session.shutdown totalPremiumRequests)
+                if parsed_prus is not None:
+                    s.effective_prus = parsed_prus
+                    s.estimated_cost_usd = parsed_prus * PRU_UNIT_PRICE_USD
+                else:
+                    print(
+                        f"Warning: no model data for session '{s.session_id}'; cost unknown",
+                        file=sys.stderr,
+                    )
                 continue
 
             total_prus = 0.0
