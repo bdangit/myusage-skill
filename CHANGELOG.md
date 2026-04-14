@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/bdangit/myusage-skill/compare/v1.1.3...v1.2.0) (2026-04-14)
+
+
+### Features
+
+* add squad infrastructure and team configuration ([2a25eef](https://github.com/bdangit/myusage-skill/commit/2a25eef4808685938302705f0d6c3d74439415b1))
+
 ## [1.1.3](https://github.com/bdangit/myusage-skill/compare/v1.1.2...v1.1.3) (2026-03-25)
 
 
