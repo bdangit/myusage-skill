@@ -538,6 +538,8 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
         tool_call_count = 0
         messages: List[Message] = []
         model_request_counts: Dict[str, int] = {}
+        total_pru: float = 0.0
+        has_pru_data = False
 
         for ev in events:
             ev_type = ev.get("type", "")
@@ -561,6 +563,15 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
                 ts_str = data.get("endTime") or ev.get("endTime") or data.get("sessionStartTime") or ev.get("sessionStartTime")
                 # Try to get end time from model metrics or just use last known
                 # We'll derive end_time from last message timestamp
+                pru_val = data.get("totalPremiumRequests")
+                if pru_val is None:
+                    pru_val = ev.get("totalPremiumRequests")
+                if pru_val is not None:
+                    try:
+                        total_pru = float(pru_val)
+                        has_pru_data = True
+                    except (TypeError, ValueError):
+                        pass
 
             elif ev_type == "session.mode_changed":
                 new_mode = data.get("newMode") or ev.get("newMode")
@@ -646,6 +657,7 @@ def parse_copilot_cli(cli_dir: str) -> List[Session]:
             inter_message_gaps=gaps,
             character_approximate=False,
             model_request_counts=model_request_counts if model_request_counts else None,
+            effective_prus=total_pru if has_pru_data else None,
         )
         char, approx = classify_session_character(session)
         session.session_character = char
@@ -1762,9 +1774,10 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
             sess_list = snap.sessions
             codex_total = sum(s.total_tokens for s in sess_list if s.total_tokens is not None and not s.cost_breakdown_available)
             if codex_total > 0:
-                # Show total tokens for Codex in a combined display, use "—" for breakdown
-                tool_input_display[t] = "—"
-                tool_output_display[t] = f"{codex_total:,}*"
+                # Codex only exposes a combined token total (no input/output split).
+                # Show it in the input column so it isn't mistaken for output-only.
+                tool_input_display[t] = f"{codex_total:,}*"
+                tool_output_display[t] = "—"
                 has_codex_tokens = True
             else:
                 # No data available
@@ -1804,7 +1817,7 @@ def render_html(report: InsightsReport, output_path: str, chartjs_src: Optional[
     # --- Build cost footnote with Codex notice if applicable ---
     cost_footnote = 'ⓘ Cost figures are <em>estimated</em> at list price using locally stored price schedules. Plan allowances and actual billing may differ.<br><strong>Claude Code:</strong> (input tokens ÷ 1M × input $/M) + (output tokens ÷ 1M × output $/M) — e.g. Sonnet 4.6 at $3.00/M in · $15.00/M out, Haiku 4.5 at $0.80/M in · $4.00/M out, Opus 4.6 at $15.00/M in · $75.00/M out.<br><strong>Copilot:</strong> requests × per-model PRU multiplier = effective PRUs × $0.04/PRU — e.g. gpt-4o and most Claude models at 1.0×, Opus at 3.0×.'
     if has_codex_tokens:
-        cost_footnote += '<br><strong>Codex:</strong> Token count is combined (input + output). Input/output breakdown is not available; cells show "—".'
+        cost_footnote += '<br><strong>Codex:</strong> Token count is combined (input + output) from the Codex database — individual input/output breakdown unavailable. Combined total shown in the Input column; Output shows "—".'
 
     # Build HTML/CSS heatmap grid
     _heatmap_day_colors = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#06b6d4", "#f97316"]
