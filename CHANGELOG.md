@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/bdangit/myusage-skill/compare/v1.3.0...v1.3.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* correct Codex label in CHANGELOG - Codex is OpenAI CLI, not Claude CLI ([515fe71](https://github.com/bdangit/myusage-skill/commit/515fe71fbb2909d17d9ea3f18351b990602ecbbf))
+
 ## [1.3.0](https://github.com/bdangit/myusage-skill/compare/v1.2.0...v1.3.0) (2026-04-14)
 
 
