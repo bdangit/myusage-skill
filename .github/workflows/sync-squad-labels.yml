@@ -15,7 +15,7 @@ jobs:
   sync-labels:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@ac593985615ec2ede58e76d415e9c714c9ce2592  # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Parse roster and sync labels
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7
