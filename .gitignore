@@ -12,5 +12,18 @@ __pycache__/
 # Generated report output (personal data)
 *.html
 
+# Local squad runtime state
+.squad/decisions/
+.squad/sessions/
+.squad/identity/
+.squad/agents/*/history.md
+.squad/agents/*/PHASE*_COMPLETE.md
+.squad/agents/*/phase*-summary.txt
+.squad/phase-status.md
+.squad/IMPLEMENTATION-COMPLETE.md
+.squad/routing.md
+.squad/ceremonies.md
+.squad/decisions.md
+
 # macOS
 .DS_Store
