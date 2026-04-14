@@ -5,7 +5,7 @@
 
 ### Features
 
-* add Codex (Claude CLI) platform support with message counts, token tracking, and rollout-based model resolution ([61faa1f](https://github.com/bdangit/myusage-skill/commit/61faa1f38a979175b6cba259d63843c13308247c))
+* add Codex (OpenAI CLI) platform support with message counts, token tracking, and rollout-based model resolution ([61faa1f](https://github.com/bdangit/myusage-skill/commit/61faa1f38a979175b6cba259d63843c13308247c))
 
 
 ### Bug Fixes
