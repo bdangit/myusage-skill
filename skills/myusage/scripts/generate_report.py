@@ -247,6 +247,17 @@ def parse_claude_code(claude_dir: str) -> List[Session]:
                 msg_obj = entry.get("message", {})
                 content_raw = msg_obj.get("content", "")
                 if isinstance(content_raw, list):
+                    # Skip entries that are purely tool_result blocks — these are
+                    # tool responses fed back to the model, not real human messages.
+                    block_types = {
+                        block.get("type")
+                        for block in content_raw
+                        if isinstance(block, dict)
+                    }
+                    if block_types and block_types <= {"tool_result"}:
+                        if not project_path:
+                            project_path = entry.get("cwd")
+                        continue
                     parts = []
                     for block in content_raw:
                         if isinstance(block, dict):
