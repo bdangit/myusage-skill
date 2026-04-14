@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/bdangit/myusage-skill/compare/v1.2.0...v1.3.0) (2026-04-14)
+
+
+### Features
+
+* add Codex (Claude CLI) platform support with message counts, token tracking, and rollout-based model resolution ([61faa1f](https://github.com/bdangit/myusage-skill/commit/61faa1f38a979175b6cba259d63843c13308247c))
+
+
+### Bug Fixes
+
+* correct Codex token column display and add Copilot CLI PRU extraction ([8d5cd68](https://github.com/bdangit/myusage-skill/commit/8d5cd68))
+* count Codex messages from event_msg user_message events ([e8a122d](https://github.com/bdangit/myusage-skill/commit/e8a122d))
+* preserve parsed PRU data in compute_session_costs for copilot_cli ([c0920da](https://github.com/bdangit/myusage-skill/commit/c0920da))
+* skip tool_result entries in Claude Code message count ([cb7cb41](https://github.com/bdangit/myusage-skill/commit/cb7cb41))
+
 ## [1.2.0](https://github.com/bdangit/myusage-skill/compare/v1.1.3...v1.2.0) (2026-04-14)
 
 
